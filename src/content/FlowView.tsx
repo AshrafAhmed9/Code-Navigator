@@ -13,8 +13,7 @@ function loadMermaid() {
         startOnLoad: false,
         theme: 'dark',
         securityLevel: 'strict',
-        flowchart: { htmlLabels: true, curve: 'basis', nodeSpacing: 40, rankSpacing: 60 },
-        themeVariables: { fontSize: '16px' },
+        flowchart: { htmlLabels: true, curve: 'basis', nodeSpacing: 40, rankSpacing: 60, padding: 20, wrappingWidth: 260 },
       })
       return mermaid
     })

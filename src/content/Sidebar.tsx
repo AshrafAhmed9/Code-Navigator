@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { parseRepoUrl, resolveCommitSha, fetchRepoTree } from '../lib/github'
 import { buildImportGraph, mostDependedOn } from '../lib/graphBuilder'
 import { getGraph, setGraph, graphKey } from '../lib/cache'
@@ -33,6 +33,9 @@ export function Sidebar() {
   const [codeFont, setCodeFont] = useState<'sans' | 'mono'>('sans')
   const [theme, setTheme] = useState<Theme>(() => detectGitHubTheme())
   const [pinned, setPinned] = useState(() => localStorage.getItem('cn-pinned') === '1')
+  const [pinnedWidth, setPinnedWidth] = useState(() => Number(localStorage.getItem('cn-pinned-width')) || 480)
+  const pinnedWidthRef = useRef(pinnedWidth)
+  const resizeState = useRef<{ startX: number; startWidth: number } | null>(null)
 
   const prRef = usePrRef()
   const ref = useMemo(() => parseRepoUrl(window.location.href), [])
@@ -128,13 +131,14 @@ export function Sidebar() {
   }
 
   // Pinned mode pushes GitHub's own page content over to reserve room for the
-  // sidebar (like Octotree's pin), instead of floating on top of it.
+  // sidebar (like Octotree's pin), instead of floating on top of it — and the
+  // panel itself widens (drag-resizable) rather than staying the same size.
   useEffect(() => {
     const html = document.documentElement
     const marginProp = dockSide === 'left' ? 'marginLeft' : 'marginRight'
     if (pinned && !collapsed) {
-      html.style[marginProp] = '372px'
-      html.style.transition = 'margin 0.2s ease'
+      html.style[marginProp] = `${pinnedWidth + 42}px`
+      html.style.transition = resizeState.current ? 'none' : 'margin 0.2s ease'
     } else {
       html.style.marginLeft = ''
       html.style.marginRight = ''
@@ -143,7 +147,36 @@ export function Sidebar() {
       html.style.marginLeft = ''
       html.style.marginRight = ''
     }
-  }, [pinned, collapsed, dockSide])
+  }, [pinned, collapsed, dockSide, pinnedWidth])
+
+  const MIN_PINNED_WIDTH = 340
+  const MAX_PINNED_WIDTH = 880
+
+  const onResizeMove = useCallback(
+    (e: PointerEvent) => {
+      if (!resizeState.current) return
+      const delta = dockSide === 'left' ? e.clientX - resizeState.current.startX : resizeState.current.startX - e.clientX
+      const next = Math.min(MAX_PINNED_WIDTH, Math.max(MIN_PINNED_WIDTH, resizeState.current.startWidth + delta))
+      pinnedWidthRef.current = next
+      setPinnedWidth(next)
+    },
+    [dockSide],
+  )
+  const onResizeUp = useCallback(() => {
+    resizeState.current = null
+    document.body.style.userSelect = ''
+    localStorage.setItem('cn-pinned-width', String(pinnedWidthRef.current))
+    window.removeEventListener('pointermove', onResizeMove)
+    window.removeEventListener('pointerup', onResizeUp)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onResizeMove])
+
+  function onResizeDown(e: React.PointerEvent) {
+    resizeState.current = { startX: e.clientX, startWidth: pinnedWidth }
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', onResizeMove)
+    window.addEventListener('pointerup', onResizeUp)
+  }
 
   if (!ref) return null
 
@@ -156,7 +189,7 @@ export function Sidebar() {
       <div
         className={`cn-root ${collapsed ? 'cn-collapsed' : ''} ${dockSide === 'left' ? 'cn-dock-left' : ''} ${
           codeFont === 'mono' ? 'cn-font-mono' : ''
-        }`}
+        } ${pinned && !collapsed ? 'cn-pinned' : ''}`}
         data-theme={theme}
       >
         <button className="cn-toggle" onClick={toggle} title="Code Navigator (⌘K to search)">
@@ -166,7 +199,14 @@ export function Sidebar() {
           </svg>
         </button>
         {!collapsed && (
-          <div className="cn-panel">
+          <div className="cn-panel" style={pinned ? { width: pinnedWidth } : undefined}>
+            {pinned && (
+              <div
+                className={`cn-resize-handle ${dockSide === 'left' ? 'cn-resize-handle-left' : ''}`}
+                onPointerDown={onResizeDown}
+                title="Drag to resize"
+              />
+            )}
             <div className="cn-header">
               {showBack ? (
                 <button className="cn-back" onClick={() => setView({ kind: 'repo-map' })}>

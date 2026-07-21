@@ -90,6 +90,7 @@ export const styles = `
 .cn-root.cn-collapsed .cn-toggle { border-radius: 14px; border-right: 1px solid var(--cn-hairline); }
 
 .cn-panel {
+  position: relative;
   width: 344px;
   max-height: 80vh;
   display: flex;
@@ -102,6 +103,7 @@ export const styles = `
   border-radius: 18px 0 0 18px;
   box-shadow: -8px 16px 48px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.04) inset;
   color: var(--cn-text);
+  transition: border-radius 0.2s ease;
   overflow: hidden;
 }
 
@@ -355,17 +357,40 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
 .cn-flow-viewport.cn-flow-dragging { cursor: grabbing; }
 .cn-flow-svg { transform-origin: top center; transition: transform 0.1s ease; }
 .cn-flow-dragging .cn-flow-svg { transition: none; }
-.cn-flow-svg svg { max-width: none; min-width: 500px; }
+.cn-flow-svg svg { max-width: none; min-width: 500px; overflow: visible; }
 .cn-flow-svg .edgeLabel { background-color: transparent; }
+.cn-flow-svg foreignObject { overflow: visible; }
+.cn-flow-svg .node rect, .cn-flow-svg .node polygon, .cn-flow-svg .node circle { overflow: visible; }
+.cn-flow-svg .nodeLabel { white-space: normal !important; overflow: visible !important; }
 
 .cn-pr-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--cn-hairline-soft); }
 .cn-pr-row:last-child { border-bottom: none; }
+
+/* Pinned mode: full-height side panel instead of a floating centered card */
+.cn-root.cn-pinned { top: 0; transform: none; height: 100vh; align-items: stretch; }
+.cn-root.cn-pinned .cn-panel { max-height: 100vh; border-radius: 0; box-shadow: -8px 0 32px rgba(0,0,0,0.35); }
+.cn-root.cn-pinned.cn-dock-left .cn-panel { box-shadow: 8px 0 32px rgba(0,0,0,0.35); }
+.cn-root.cn-pinned .cn-toggle { display: none; }
+
+.cn-resize-handle {
+  position: absolute; top: 0; left: 0; width: 6px; height: 100%; cursor: ew-resize; z-index: 5;
+  touch-action: none;
+}
+.cn-resize-handle::after {
+  content: ''; position: absolute; top: 0; left: 2px; width: 2px; height: 100%;
+  background: transparent; transition: background 0.15s ease;
+}
+.cn-resize-handle:hover::after, .cn-resize-handle:active::after { background: var(--cn-accent); }
+.cn-resize-handle-left { left: auto; right: 0; }
+.cn-resize-handle-left::after { left: auto; right: 2px; }
 
 /* Dock on the left edge instead of right — mirror everything */
 .cn-root.cn-dock-left { left: 0; right: auto; flex-direction: row-reverse; }
 .cn-root.cn-dock-left .cn-toggle { border-radius: 0 14px 14px 0; border: 1px solid var(--cn-hairline); border-left: none; }
 .cn-root.cn-dock-left.cn-collapsed .cn-toggle { border-radius: 14px; border-left: 1px solid var(--cn-hairline); }
 .cn-root.cn-dock-left .cn-panel { border-radius: 0 18px 18px 0; border: 1px solid var(--cn-hairline); border-left: none; box-shadow: 8px 16px 48px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.04) inset; }
+/* Pinned + dock-left both active: keep flat edges, overriding the rounded dock-left corners above (later rule wins on equal specificity). */
+.cn-root.cn-pinned.cn-dock-left .cn-panel { border-radius: 0; box-shadow: 8px 0 32px rgba(0,0,0,0.35); }
 
 .cn-tree-search {
   width: 100%; padding: 8px 12px; font-size: 12.5px; border: 1px solid var(--cn-hairline-soft);
@@ -375,15 +400,18 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
 .cn-tree-search::placeholder { color: var(--cn-muted-dim); }
 .cn-tree-search:focus { border-color: var(--cn-accent); }
 .cn-tree { font-size: 12.5px; }
+.cn-tree-node { position: relative; }
 .cn-tree-row {
-  display: flex; align-items: center; gap: 7px; width: 100%; padding: 4px 8px 4px 0;
+  display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 8px;
   background: none; border: none; text-align: left; cursor: pointer; color: var(--cn-text);
   border-radius: 6px; transition: background 0.12s ease;
 }
 .cn-tree-row:hover { background: var(--cn-card); }
 .cn-tree-folder-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cn-tree-chevron { color: var(--cn-muted); flex-shrink: 0; transition: transform 0.15s ease; }
+.cn-tree-count { margin-left: auto; font-size: 10px; color: var(--cn-muted-dim); flex-shrink: 0; }
+.cn-tree-chevron { color: var(--cn-muted); flex-shrink: 0; transition: transform 0.18s var(--cn-ease); }
 .cn-tree-chevron-open { transform: rotate(90deg); }
+.cn-tree-folder-icon { color: #6fa8dc; flex-shrink: 0; }
 .cn-tree-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-left: 3px; }
 .cn-tree-file-link {
   flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -396,6 +424,15 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
 }
 .cn-tree-row:hover .cn-tree-star { opacity: 1; }
 .cn-tree-star-on { opacity: 1; color: var(--cn-warning); }
+
+/* Smooth expand/collapse without measuring heights in JS (grid-template-rows trick) */
+.cn-tree-children-wrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.18s var(--cn-ease); }
+.cn-tree-children-wrap.cn-open { grid-template-rows: 1fr; }
+.cn-tree-children-inner { overflow: hidden; min-height: 0; }
+.cn-tree-children {
+  margin-left: 15px; padding-left: 9px; border-left: 1px solid var(--cn-hairline-soft);
+}
+.cn-tree-children:hover { border-left-color: var(--cn-hairline); }
 
 .cn-bookmark-group { display: flex; flex-direction: column; }
 .cn-bookmark-row {

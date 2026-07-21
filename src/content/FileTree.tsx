@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { RepoGraph } from '../lib/types'
-import { buildFileTree, ancestorPaths, type TreeNode } from '../lib/tree'
+import { buildFileTree, ancestorPaths, type TreeNode, type TreeFolderNode } from '../lib/tree'
 import { toggleBookmark, isBookmarked, type Bookmark } from '../lib/bookmarks'
 import { detectLanguage } from '../lib/language'
 
@@ -22,15 +22,20 @@ function blobUrl(graph: RepoGraph, path: string): string {
   return `https://github.com/${owner}/${repo}/blob/${graph.commitSha}/${path}`
 }
 
+/** First time a repo's tree is opened, expand the top level so it isn't a wall of collapsed rows. */
+function defaultExpanded(tree: TreeNode[]): Set<string> {
+  return new Set(tree.filter((n): n is TreeFolderNode => n.kind === 'folder').map((n) => n.path))
+}
+
 export function FileTree({ graph }: { graph: RepoGraph }) {
   const tree = useMemo(() => buildFileTree(graph.allPaths), [graph])
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem(`cn-tree-expanded:${graph.repoKey}`)
-      return saved ? new Set(JSON.parse(saved)) : new Set()
+      return saved ? new Set(JSON.parse(saved)) : defaultExpanded(tree)
     } catch {
-      return new Set()
+      return defaultExpanded(tree)
     }
   })
 
@@ -71,15 +76,7 @@ export function FileTree({ graph }: { graph: RepoGraph }) {
       />
       <div className="cn-tree">
         {tree.map((node) => (
-          <TreeRow
-            key={node.path}
-            node={node}
-            depth={0}
-            graph={graph}
-            expanded={expanded}
-            onToggleFolder={toggleFolder}
-            matchSet={matchSet}
-          />
+          <TreeRow key={node.path} node={node} graph={graph} expanded={expanded} onToggleFolder={toggleFolder} matchSet={matchSet} />
         ))}
       </div>
     </div>
@@ -88,14 +85,12 @@ export function FileTree({ graph }: { graph: RepoGraph }) {
 
 function TreeRow({
   node,
-  depth,
   graph,
   expanded,
   onToggleFolder,
   matchSet,
 }: {
   node: TreeNode
-  depth: number
   graph: RepoGraph
   expanded: Set<string>
   onToggleFolder: (path: string) => void
@@ -110,7 +105,7 @@ function TreeRow({
   if (node.kind === 'file') {
     const language = detectLanguage(node.name)
     return (
-      <div className="cn-tree-row" style={{ paddingLeft: depth * 14 + 8 }}>
+      <div className="cn-tree-row">
         <span className="cn-tree-dot" style={{ background: LANG_COLOR[language] ?? LANG_COLOR.other }} />
         <a className="cn-tree-file-link" href={blobUrl(graph, node.path)} title={node.path}>
           {node.name}
@@ -122,8 +117,8 @@ function TreeRow({
 
   const isOpen = matchSet ? true : expanded.has(node.path)
   return (
-    <div>
-      <button className="cn-tree-row cn-tree-folder" style={{ paddingLeft: depth * 14 }} onClick={() => onToggleFolder(node.path)}>
+    <div className="cn-tree-node">
+      <button className="cn-tree-row cn-tree-folder" onClick={() => onToggleFolder(node.path)}>
         <svg
           width="10"
           height="10"
@@ -135,21 +130,36 @@ function TreeRow({
         >
           <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
+        <FolderIcon open={isOpen} />
         <span className="cn-tree-folder-name">{node.name}</span>
+        {node.children.length > 0 && <span className="cn-tree-count">{node.children.length}</span>}
       </button>
-      {isOpen &&
-        node.children.map((child) => (
-          <TreeRow
-            key={child.path}
-            node={child}
-            depth={depth + 1}
-            graph={graph}
-            expanded={expanded}
-            onToggleFolder={onToggleFolder}
-            matchSet={matchSet}
-          />
-        ))}
+      <div className={`cn-tree-children-wrap ${isOpen ? 'cn-open' : ''}`}>
+        <div className="cn-tree-children-inner">
+          <div className="cn-tree-children">
+            {node.children.map((child) => (
+              <TreeRow key={child.path} node={child} graph={graph} expanded={expanded} onToggleFolder={onToggleFolder} matchSet={matchSet} />
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
+  )
+}
+
+function FolderIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="cn-tree-folder-icon">
+      {open ? (
+        <path
+          d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3V7z M3 10h20l-2 9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+          fill="currentColor"
+          fillRule="evenodd"
+        />
+      ) : (
+        <path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" fill="currentColor" />
+      )}
+    </svg>
   )
 }
 
