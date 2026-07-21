@@ -17,6 +17,15 @@ in that graph. Nothing is ever proxied through a server this project runs.
 > tiny one — the value is orienting you in a codebase too large to read file
 > by file.
 
+## Install
+
+- **Chrome Web Store**: coming soon.
+- **From source** (works today): see [Develop](#develop) below — clone,
+  `npm install && npm run build`, then load `dist/` as an unpacked extension.
+
+Your GitHub token and LLM key never leave your browser. See
+[docs/privacy.md](docs/privacy.md).
+
 ### Why not just use Copilot / ChatGPT?
 
 | | Copilot / ChatGPT | Code Navigator |
@@ -93,6 +102,15 @@ in that graph. Nothing is ever proxied through a server this project runs.
 - **PR review mode** — open any `github.com/owner/repo/pull/N` and the
   sidebar overlays impact analysis (affected count, risk tier, related test
   count) on every changed file, built against the PR's actual head commit.
+- **"Explain this PR"** — a grounded LLM summary of what the PR does, which
+  Core Systems it touches, overall risk, and a suggested review order —
+  narrated over the same impact data above, not invented. Falls back to the
+  deterministic changed-file list if no LLM key is configured.
+
+### Coming back to a repo
+- **Recent tab** — the files, PRs, and issues you've visited in this repo,
+  most-recent-first, stored only in `chrome.storage.local` (zero API cost).
+  Makes the sidebar useful every session, not just the first one.
 
 ### Customization
 - **Follows GitHub's own theme**, live — no reload needed.
@@ -225,7 +243,9 @@ TypeScript, React 19, Vite + `@crxjs/vite-plugin` (MV3 bundling), `idb`
 - GitHub token and LLM key live in `chrome.storage.local` — local to your
   browser profile, never synced anywhere this project controls (there isn't
   a server to control).
-- Bookmarks and tree-expansion state stored locally the same way.
+- Bookmarks, recent activity, and tree-expansion state stored locally the
+  same way.
+- Full policy: [docs/privacy.md](docs/privacy.md).
 
 ---
 
