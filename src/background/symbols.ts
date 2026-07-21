@@ -11,7 +11,18 @@
  * it's not attached to any page, so github.com's CSP has no bearing on it —
  * only this extension's OWN CSP applies (see manifest.config.ts's
  * content_security_policy, which explicitly adds 'wasm-unsafe-eval').
+ *
+ * IMPORTANT: this uses a static top-level `import`, not a dynamic `import()`.
+ * That's not a style choice — dynamic import() is disallowed inside a running
+ * ServiceWorkerGlobalScope by the HTML spec itself (confirmed via a real
+ * TypeError during testing: "import() is disallowed on ServiceWorkerGlobalScope
+ * by the HTML specification", https://github.com/w3c/ServiceWorker/issues/1356).
+ * A static import is resolved during initial module evaluation, before that
+ * restriction applies, so it works — the tradeoff is web-tree-sitter's JS
+ * loads into memory whenever the background script starts, not lazily only
+ * when a file is actually parsed.
  */
+import { Parser, Language, Query } from 'web-tree-sitter'
 
 type SupportedLang = 'javascript' | 'typescript' | 'tsx'
 
@@ -61,38 +72,30 @@ const LANG_WASM_PATH: Record<SupportedLang, string> = {
   tsx: 'wasm/tree-sitter-tsx.wasm',
 }
 
-let treeSitterModule: typeof import('web-tree-sitter') | null = null
 let initPromise: Promise<void> | null = null
-const languageCache = new Map<SupportedLang, InstanceType<typeof import('web-tree-sitter').Language>>()
-const queryCache = new Map<
-  InstanceType<typeof import('web-tree-sitter').Language>,
-  { definitions: InstanceType<typeof import('web-tree-sitter').Query>; calls: InstanceType<typeof import('web-tree-sitter').Query> }
->()
+const languageCache = new Map<SupportedLang, Language>()
+const queryCache = new Map<Language, { definitions: Query; calls: Query }>()
 
 async function ensureInit(): Promise<void> {
   if (!initPromise) {
-    initPromise = import('web-tree-sitter').then(async (mod) => {
-      treeSitterModule = mod
-      await mod.Parser.init({
-        locateFile: (path: string) => (path.endsWith('.wasm') ? chrome.runtime.getURL('wasm/web-tree-sitter.wasm') : path),
-      })
+    initPromise = Parser.init({
+      locateFile: (path: string) => (path.endsWith('.wasm') ? chrome.runtime.getURL('wasm/web-tree-sitter.wasm') : path),
     })
   }
   await initPromise
 }
 
-async function getLanguage(lang: SupportedLang) {
+async function getLanguage(lang: SupportedLang): Promise<Language> {
   const cached = languageCache.get(lang)
   if (cached) return cached
-  const language = await treeSitterModule!.Language.load(chrome.runtime.getURL(LANG_WASM_PATH[lang]))
+  const language = await Language.load(chrome.runtime.getURL(LANG_WASM_PATH[lang]))
   languageCache.set(lang, language)
   return language
 }
 
-function getQueries(language: InstanceType<typeof import('web-tree-sitter').Language>) {
+function getQueries(language: Language) {
   const cached = queryCache.get(language)
   if (cached) return cached
-  const Query = treeSitterModule!.Query
   const queries = { definitions: new Query(language, DEFINITIONS_QUERY), calls: new Query(language, CALLS_QUERY) }
   queryCache.set(language, queries)
   return queries
@@ -102,7 +105,7 @@ export async function handleParseSymbols(req: ParseSymbolsRequest): Promise<Pars
   try {
     await ensureInit()
     const language = await getLanguage(req.lang)
-    const parser = new treeSitterModule!.Parser()
+    const parser = new Parser()
     parser.setLanguage(language)
     const tree = parser.parse(req.source)
     if (!tree) throw new Error('parse produced no tree')
