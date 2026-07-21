@@ -51,4 +51,8 @@ export const styles = `
 .cn-risk-low { background: #dafbe1; color: #1a7f37; }
 .cn-risk-medium { background: #fff8c5; color: #9a6700; }
 .cn-risk-high { background: #ffebe9; color: #cf222e; }
+.cn-badge-inferred { background: #ddf4ff; color: #0969da; font-weight: 500; text-transform: none; }
+.cn-purpose-text { font-size: 12.5px; line-height: 1.6; color: #1f2328; }
+.cn-cursor { animation: cn-blink 1s step-start infinite; }
+@keyframes cn-blink { 50% { opacity: 0; } }
 `

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { RepoGraph } from '../lib/types'
 import { computeImpact } from '../lib/graphBuilder'
+import { PurposePanel } from './PurposePanel'
 
 export function FilePanel({ graph, path }: { graph: RepoGraph; path: string }) {
   const file = graph.files[path]
@@ -16,6 +17,8 @@ export function FilePanel({ graph, path }: { graph: RepoGraph; path: string }) {
       <div className="cn-muted" style={{ wordBreak: 'break-all' }}>
         {path}
       </div>
+
+      <PurposePanel graph={graph} path={path} />
 
       <div className="cn-section">
         <div className="cn-label">
