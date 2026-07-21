@@ -94,50 +94,90 @@ export function Sidebar() {
 
   if (!ref) return null
 
+  const showBack = !prRef && view.kind !== 'repo-map'
+  const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
+
   return (
     <>
       <style>{styles}</style>
       <div className={`cn-root ${collapsed ? 'cn-collapsed' : ''}`}>
         <button className="cn-toggle" onClick={toggle} title="Code Navigator (⌘K to search)">
-          {collapsed ? '◀' : '▶'} {!collapsed && 'Code Navigator'}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+          </svg>
         </button>
         {!collapsed && (
           <div className="cn-panel">
-            {prRef ? (
-              <PrPanel pr={prRef} />
-            ) : (
-              <>
-                {status === 'resolving' && <p className="cn-muted">Resolving repo…</p>}
-                {status === 'indexing' && (
-                  <p className="cn-muted">
-                    Indexing {progress.done}/{progress.total} files…
-                    {!hasPat && (
-                      <>
-                        {' '}
-                        <a href="#" onClick={openOptions} className="cn-link">
-                          Add a token for 83× faster indexing
+            <div className="cn-header">
+              {showBack ? (
+                <button className="cn-back" onClick={() => setView({ kind: 'repo-map' })}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Back
+                </button>
+              ) : (
+                <div className="cn-brand">
+                  <span className="cn-brand-dot" />
+                  Code Navigator
+                </div>
+              )}
+              <button className="cn-collapse-btn" onClick={toggle} title="Collapse">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="cn-body">
+              {prRef ? (
+                <PrPanel pr={prRef} />
+              ) : (
+                <>
+                  {status === 'resolving' && (
+                    <div className="cn-loading">
+                      <span className="cn-spinner" />
+                      Resolving repository…
+                    </div>
+                  )}
+                  {status === 'indexing' && (
+                    <div className="cn-loading-block">
+                      <div className="cn-loading">
+                        <span className="cn-spinner" />
+                        Indexing {progress.done}/{progress.total} files…
+                      </div>
+                      <div className="cn-progress-track">
+                        <div className="cn-progress-fill" style={{ width: `${pct}%` }} />
+                      </div>
+                      {!hasPat && (
+                        <a href="#" onClick={openOptions} className="cn-link cn-hint">
+                          Add a token for 83× faster indexing →
                         </a>
-                      </>
-                    )}
-                  </p>
-                )}
-                {status === 'error' && <p className="cn-error">{error}</p>}
-                {status === 'ready' && graph && (
-                  <>
-                    <button className="cn-search-trigger" onClick={() => setPaletteOpen(true)}>
-                      🔍 Find anything… <span className="cn-kbd">⌘K</span>
-                    </button>
-                    {view.kind === 'flow' ? (
-                      <FlowView graph={graph} root={view.root} onClose={() => setView({ kind: 'repo-map' })} />
-                    ) : view.kind === 'file' && graph.files[view.path] ? (
-                      <FilePanel graph={graph} path={view.path} />
-                    ) : (
-                      <RepoMapView graph={graph} onOpenFlow={(root) => setView({ kind: 'flow', root })} />
-                    )}
-                  </>
-                )}
-              </>
-            )}
+                      )}
+                    </div>
+                  )}
+                  {status === 'error' && <div className="cn-error-block">{error}</div>}
+                  {status === 'ready' && graph && (
+                    <>
+                      <button className="cn-search-trigger" onClick={() => setPaletteOpen(true)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="11" cy="11" r="7" />
+                          <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+                        </svg>
+                        <span>Find anything…</span>
+                        <span className="cn-kbd">⌘K</span>
+                      </button>
+                      {view.kind === 'file' && graph.files[view.path] ? (
+                        <FilePanel graph={graph} path={view.path} />
+                      ) : (
+                        <RepoMapView graph={graph} onOpenFlow={(root) => setView({ kind: 'flow', root })} />
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -155,6 +195,9 @@ export function Sidebar() {
           }}
         />
       )}
+      {view.kind === 'flow' && graph && (
+        <FlowView graph={graph} root={view.root} onClose={() => setView({ kind: 'repo-map' })} />
+      )}
     </>
   )
 }
@@ -171,50 +214,66 @@ function RepoMapView({ graph, onOpenFlow }: { graph: RepoGraph; onOpenFlow: (roo
 
       {systems.length > 0 && (
         <div className="cn-section">
-          <div className="cn-label">Core systems</div>
-          {systems.map((s) => (
-            <div key={s.name} className="cn-system-row">
-              <div className="cn-system-name">{s.name}</div>
-              {s.files.slice(0, 3).map((f) => (
-                <div key={f.path} className="cn-file-row cn-system-file">
-                  {f.path}
-                </div>
-              ))}
-            </div>
-          ))}
+          <div className="cn-label">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+            </svg>
+            Core systems
+          </div>
+          <div className="cn-card">
+            {systems.map((s) => (
+              <div key={s.name} className="cn-system-row">
+                <div className="cn-system-name">{s.name}</div>
+                {s.files.slice(0, 3).map((f) => (
+                  <div key={f.path} className="cn-file-row cn-system-file">
+                    {f.path}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       <div className="cn-section">
         <div className="cn-label">Entry points</div>
-        {graph.entryPoints.slice(0, 5).map((p) => (
-          <div key={p} className="cn-file-row cn-entry-row">
-            <span>{p}</span>
-            <button className="cn-flow-btn" title="Trace flow from here" onClick={() => onOpenFlow(p)}>
-              ⤳ flow
-            </button>
-          </div>
-        ))}
+        <div className="cn-card">
+          {graph.entryPoints.slice(0, 5).map((p) => (
+            <div key={p} className="cn-file-row cn-entry-row">
+              <span className="cn-file-path">{p}</span>
+              <button className="cn-flow-btn" title="Trace flow from here" onClick={() => onOpenFlow(p)}>
+                ⤳ flow
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="cn-section">
         <div className="cn-label">Most depended-on files</div>
-        {topFiles.map((f) => (
-          <div key={f.path} className="cn-file-row">
-            {f.path} <span className="cn-badge">{f.importedBy.length}</span>
-          </div>
-        ))}
+        <div className="cn-card">
+          {topFiles.map((f) => (
+            <div key={f.path} className="cn-file-row">
+              <span className="cn-file-path">{f.path}</span> <span className="cn-badge">{f.importedBy.length}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="cn-section">
         <div className="cn-label">Language breakdown</div>
-        {Object.entries(graph.languageBreakdown)
-          .sort((a, b) => b[1] - a[1])
-          .map(([lang, count]) => (
-            <div key={lang} className="cn-file-row">
-              {lang} <span className="cn-badge">{count}</span>
-            </div>
-          ))}
+        <div className="cn-card cn-lang-row">
+          {Object.entries(graph.languageBreakdown)
+            .sort((a, b) => b[1] - a[1])
+            .map(([lang, count]) => (
+              <span key={lang} className="cn-lang-pill">
+                {lang} <span className="cn-badge">{count}</span>
+              </span>
+            ))}
+        </div>
       </div>
     </div>
   )
