@@ -1,19 +1,15 @@
 # Code Navigator
 
 Every developer has joined a repository where they had no idea where to
-start. Code Navigator reduces hours of clicking through files into minutes
-by reconstructing the repo's architecture, telling you the safest places to
-make a change, and showing exactly what that change will affect — directly
-inside GitHub, before you write a line of code.
+start. Code Navigator reconstructs a repo's architecture, shows where
+systems begin and end, identifies the safest places to make a change, and
+reveals exactly what that change will affect — directly inside GitHub,
+before you write a line of code. Think of it as a map for software
+architecture, built into the browser.
 
-It's not a GitHub enhancement with dependency graphs bolted on. It's a
-**software architecture navigator**: every feature exists to answer one
-question — *can I understand this codebase and change it safely, in the
-next 15 minutes?*
-
-Everything runs **client-side, in the browser** — there is no backend and no
-hosting cost. It fetches files via the GitHub API, builds a real dependency
-graph in-memory, and optionally calls **your own** LLM API key (Anthropic or
+Everything runs **client-side** — there is no backend and no hosting cost.
+It fetches files via the GitHub API, builds a real dependency graph
+in-memory, and optionally calls **your own** LLM API key (Anthropic or
 OpenAI) directly from the browser for natural-language explanations grounded
 in that graph. Nothing is ever proxied through a server this project runs.
 
@@ -21,98 +17,104 @@ in that graph. Nothing is ever proxied through a server this project runs.
 > tiny one — the value is orienting you in a codebase too large to read file
 > by file.
 
+### Why not just use Copilot / ChatGPT?
+
+| | Copilot / ChatGPT | Code Navigator |
+|---|---|---|
+| Explains | One file, in isolation | The repo's actual architecture |
+| Scope | Whatever's in the current context window | The whole dependency graph, computed once |
+| Before you edit | Nothing — you find out what breaks after | Impact, risk tier, and affected tests, upfront |
+| Grounding | Model's read of the code as text | A real graph the model narrates on top of, never invents |
+| Cost model | Per-message | Free graph features; LLM narratives use your own key |
+
 ---
 
 ## What it does
 
-### Understand a repo fast
-- **"Understand this repository" screen** (Map tab) — the first thing you see
-  on any repo: auto-detected **Core Systems** (Authentication, API, Database,
-  Cache, Message Queue, Payments, Background Jobs, Config, Storage), entry
-  points, the most depended-on files, and a language breakdown. Not a flat
-  file list — grouped by what the code *is*, not just where it lives.
+### Understand a repo, fast
+- **"Understand this repository" screen** (the Map tab) — the first thing
+  you see: auto-detected **Core Systems** (Authentication, API, Database,
+  Cache, Message Queue, Payments, Background Jobs, Config, Storage) each with
+  a **High/Medium/Low confidence score and a visible reason** ("clustered in
+  auth/, 3 keyword signals" vs. "scattered across the repo, single keyword
+  match") — a keyword match is a guess, not a fact, and this says so rather
+  than implying false certainty. Also shows entry points, the most
+  depended-on files, and a language breakdown.
+- **Guided Tours** — click "Learn Authentication" (or any Core System /
+  entry point) and get an ordered reading list with time estimates: "Step 1
+  of 6 · ~12 min," each step showing *why* it's there (which earlier file
+  pulled it in), with mark-as-read checkboxes and a progress bar. Turns the
+  import graph into a reading path instead of a pile of files.
 - **⌘K / Ctrl+K command palette** — question-driven search ("Find
-  Authentication," "Find Database," or free text). Results are ranked by
-  filename/exported-symbol match plus import centrality (how many other files
-  depend on it), with an optional LLM narrative explaining which result is
-  the right starting point.
+  Authentication," "Find Database," or free text), ranked by
+  filename/exported-symbol match plus import centrality, with an optional
+  LLM narrative explaining which result is the right starting point.
 - **Architecture flow diagrams** — traces the import graph outward from any
-  entry point or search result (bounded to ~18 nodes / 4 levels deep so it
-  stays readable) and renders it as an interactive mermaid flowchart: drag to
-  pan, scroll to zoom, a Fit button to reset. Opens fit-to-viewport by
-  default — the zoom is computed from the diagram's actual rendered size so
-  it's never cut off, with an upper cap so a tiny 2-node diagram doesn't
-  blow up to fill the whole screen.
-
-### Make a safe change
-- **Safe Change Checklist** — the first thing you see on a file: an
-  actionable checklist ("Read X", "Check N consumers", "Review impact across
-  N areas", "Run N related tests") composed entirely from data already on the
-  page, not a new data source, with a risk-tier badge. Reframes "here are some
-  numbers" into "here's what to actually do before you edit this."
-- **Per-file impact analysis** — referenced-by, imports, and the full
-  transitive impact set **grouped by affected area** (directory), not just a
-  raw count, with a LOW/MEDIUM/HIGH risk tier. Every file listed links
-  straight to it on GitHub.
-- **Related tests** — test files that import the changed file or anything in
-  its impact set, found via the import graph (not guessed by naming
-  convention alone).
-- **Criticality** — an opt-in, one-API-call rating combining graph fan-in
-  with commit count and contributor count for the open file (lazy: only
-  fetched if you click "Show criticality," never automatically, and cached —
-  see API-budget notes below).
-- **Grounded LLM narratives** (each visually labeled "LLM-inferred" so
-  they're never confused with deterministic graph facts, and streamed live
-  token-by-token):
-  - **Purpose** — what a file is responsible for.
-  - **Why is this here?** — distinct from Purpose: the *reason* this file is
-    a separate piece of the codebase and why its listed consumers need it,
-    not a restatement of what it does.
-  - **What breaks if I change this?** — grouped by affected area.
-  - **What should I test?** — cites real test files from the graph, or says
-    plainly when none were found rather than inventing test names.
-- **PR review mode** — open any `github.com/owner/repo/pull/N` and the
-  sidebar overlays impact analysis (affected file count, risk tier, related
-  test count) on every changed file in the PR, built against the PR's actual
-  head commit.
+  entry point or search result and renders it as an interactive mermaid
+  flowchart: drag to pan, scroll to zoom, fit-to-viewport by default so
+  nothing is ever cut off or absurdly oversized.
 
 ### Navigate like an IDE
-- **File tree** (the default tab on open) — the full repo file/folder
-  browser (every file, not just ones the import graph indexed), with live
-  filter-as-you-type search that auto-expands matching branches,
-  per-language color-coded icons, smooth expand/collapse animation, and
-  VS-Code-style indent guide lines. Top-level folders auto-expand on first
-  open, and a home icon next to the search bar jumps back to the repo's
-  front page.
-- **Bookmarks** — star any file from the tree, or bookmark the current page
-  from the sidebar header on *any* GitHub page (file, issue, PR, or repo
-  root — detected from the URL). Stored locally, grouped by repo with an
-  "other repos" section for everything else you've saved.
-- The Map / Tree / Bookmarks tabs all render at the **same fixed panel
-  size** — switching between them never resizes the sidebar.
+- **File tree** (the default tab) — the full repo file/folder browser, live
+  filter-as-you-type search, per-language color icons, VS-Code-style indent
+  guides, smooth expand/collapse. A home icon jumps back to the repo's front
+  page.
+- **Bookmarks** — star any file, or bookmark the current page from the
+  header on *any* GitHub page (file, issue, PR, repo root). Stored locally,
+  grouped by repo.
+- Map / Tree / Bookmarks all render at the **same fixed panel size** —
+  switching tabs never resizes the sidebar.
 
-### Fits how you actually browse
-- **Follows GitHub's own theme** — reads GitHub's `data-color-mode` /
-  light-theme / dark-theme attributes (falling back to OS
-  `prefers-color-scheme` when GitHub is set to "auto") and live-updates via
-  a `MutationObserver`, so toggling GitHub's own theme switcher updates the
-  sidebar instantly, no reload.
-- **Pin sidebar** — floats over the page by default; pin it and it pushes
-  GitHub's own content over instead, becoming a permanent side panel. Pinned
-  width is **drag-resizable** (grab the inner edge) from 340px to 880px,
-  persisted across sessions.
-- **Dock left or right**, toggle from the header icon or the Settings page.
-- **Monospace code font** option for file paths and code-ish text, if you
-  prefer that over the system font.
-- **Zero-setup**: every feature above except the three LLM narratives and
-  the Find X narrative works fully keyless on public repos. A GitHub token
-  (no scopes needed) just raises the rate limit; an LLM key is separately
-  optional.
-- **Live API budget footer** — shows remaining GitHub calls at all times;
-  turns visible/warning when low with a countdown to reset and an inline
-  "add a token" link. Indexing stops calling the authenticated Contents API
-  once exhausted instead of failing through every remaining file one by one
+### Before you make a change
+- **Safe Change Checklist** — the first thing you see on a file: an
+  actionable checklist ("Read X," "Check N consumers," "Review impact
+  across N areas," "Run N related tests") composed from data already on the
+  page, with a risk-tier badge. Not another number to interpret — a list of
+  what to actually do.
+- **Per-file impact analysis** — referenced-by, imports, and the full
+  transitive impact set **grouped by affected area**, not a raw count, with
+  a LOW/MEDIUM/HIGH risk tier. Every file listed links to it on GitHub.
+- **Related tests** — found via the import graph, not guessed from naming.
+- **Real AST parsing** for the open file (JS/TS/TSX) — genuine
+  function/class/call-site extraction via tree-sitter, shown as "Functions &
+  classes · AST-parsed," distinct from the regex-based exported-symbol list.
+  Confirmed working end-to-end; see [Known limitations](#known-limitations)
+  for scope and [docs/tree-sitter.md](docs/tree-sitter.md) for the five
+  platform restrictions this took to work around.
+- **Criticality** — opt-in, one API call, combining graph fan-in with commit
+  count and contributor count. Only fetched on click, cached, never
+  automatic — see [API budget](#api-budget) below.
+- **Grounded LLM narratives** (labeled "LLM-inferred," streamed live):
+  **Purpose**, **Why is this here?** (distinct from Purpose — the *reason*
+  this file is separate, not what it does), **What breaks if I change
+  this?**, **What should I test?**.
+
+### Reviewing a PR
+- **PR review mode** — open any `github.com/owner/repo/pull/N` and the
+  sidebar overlays impact analysis (affected count, risk tier, related test
+  count) on every changed file, built against the PR's actual head commit.
+
+### Customization
+- **Follows GitHub's own theme**, live — no reload needed.
+- **Pin sidebar** — floats by default; pin it to push GitHub's content over
+  instead, becoming a permanent panel. Drag-resizable (340–880px).
+- **Dock left or right**, from the header icon or Settings.
+- **Monospace code font** option for file paths and code-ish text.
+
+---
+
+## API budget
+- **Zero-setup**: every feature above except the LLM narratives and the
+  Find X narrative works fully keyless on public repos. A GitHub token (no
+  scopes needed) raises the rate limit from 60 to 5,000 req/hr.
+- **Live budget footer** — shows remaining GitHub calls at all times; turns
+  visible/warning when low with a countdown to reset and an inline "add a
+  token" link. Indexing stops calling the authenticated Contents API once
+  exhausted instead of failing through every remaining file one by one
   (`src/lib/rateLimit.ts`).
+- **Criticality is lazy and cached** (one call, on click) — deliberately not
+  a repo-wide history crawl, which would burn the budget fast on a large
+  repo.
 
 ---
 
@@ -120,31 +122,25 @@ in that graph. Nothing is ever proxied through a server this project runs.
 
 ### Why client-side only
 No backend means: no hosting bill, nothing to keep online, and your GitHub
-token / LLM key never leaves your browser except to their own providers
-(`api.github.com`, `api.anthropic.com`, `api.openai.com`) — there is no
-middle server to trust. The tradeoff is real: a browser tab can't parse
-thousands of files upfront, so the design leans on three things instead:
+token / LLM key never leave your browser except to their own providers
+(`api.github.com`, `api.anthropic.com`, `api.openai.com`). The tradeoff: a
+browser tab can't parse thousands of files upfront, so the design leans on:
 
-1. **Import-graph first, not full ASTs.** Regex-based import extraction
-   (`src/lib/importExtract.ts`) rather than a real parser — cheap, works
-   across languages without shipping per-language grammars, but less precise
-   than AST-level analysis (see Limitations).
-2. **Everything is cached by commit SHA** (`src/lib/cache.ts`, IndexedDB +
-   an in-memory hot layer) — reopening a repo or file you've already indexed
-   is instant, and a new commit invalidates cleanly instead of silently
-   serving stale data.
-3. **Bounded, batched fetching** (`src/lib/github.ts`) — a concurrency-pooled
-   fetch (8 in flight) for file contents, and the GitHub Contents API
-   (authenticated) or raw.githubusercontent.com (unauthenticated) depending
-   on whether a token is set.
+1. **Import-graph first, not full ASTs** for the whole repo (`src/lib/importExtract.ts`,
+   regex-based) — cheap, works across languages without per-language
+   grammars, less precise than AST-level analysis. Real AST parsing exists
+   but is scoped to the single open file (see above).
+2. **Everything cached by commit SHA** (`src/lib/cache.ts`) — reopening a
+   repo/file is instant; a new commit invalidates cleanly.
+3. **Bounded, batched fetching** (`src/lib/github.ts`) — concurrency-pooled
+   (8 in flight), Contents API or raw.githubusercontent.com depending on
+   whether a token is set.
 
 ### Priorities: quality over speed, always
-Every feature that makes a claim (impact counts, "what breaks," search
-rankings) is **grounded in the deterministic import graph first**; the LLM
-is only ever used to *narrate* or *rank* on top of that evidence, never as
-the sole source of truth. A wrong-but-fast answer is treated as a bug, not
-a feature — caching, lazy loading, and streaming exist to make *correct*
-answers arrive faster, never to skip correctness for speed.
+Every claim (impact counts, "what breaks," search rankings) is **grounded in
+the deterministic import graph first**; the LLM only narrates or ranks on
+top of that evidence, never as the sole source of truth. A wrong-but-fast
+answer is a bug, not a feature.
 
 ### Source layout
 ```
@@ -155,138 +151,104 @@ src/
   background/
     index.ts               Service worker — opens Settings on first install,
                             relays parse-symbols messages
-    symbols.ts               Tree-sitter parsing (runs here, not the content
-                              script — see Known Limitations for why)
+    symbols.ts              Tree-sitter parsing (why it runs here: docs/tree-sitter.md)
+    domShim.ts               Minimal document/window shim (see docs/tree-sitter.md)
 
   content/                Injected into github.com via a shadow-DOM root
     main.tsx              Mount point; detects repo pages, remounts on
                            GitHub's Turbo SPA navigation (turbo:load-based)
     Sidebar.tsx            Top-level UI state machine: repo indexing, tabs
                            (Map/Tree/Bookmarks), pin/dock/theme, view routing
-    FilePanel.tsx          Per-file: referenced-by, impact, tests, exports
+    FilePanel.tsx          Per-file: checklist, referenced-by, impact, tests
     PurposePanel.tsx        "Purpose" LLM narrative (fetches file source)
-    NarrativePanel.tsx      Generic streaming LLM panel (What Breaks / Tests)
-    FileTree.tsx            IDE-style folder/file browser
-    BookmarksPanel.tsx       Saved bookmarks list
-    CommandPalette.tsx       ⌘K search UI
-    FlowView.tsx             Mermaid architecture-flow modal (pan/zoom)
-    PrPanel.tsx              PR review mode
-    styles.ts                All CSS as a template string (injected via
-                              <style> inside the shadow root)
+    NarrativePanel.tsx      Generic streaming LLM panel
+    SymbolsPanel.tsx         AST-parsed functions/classes (relays to background)
+    SafeChangeChecklist.tsx  Actionable checklist composed from existing data
+    CriticalityPanel.tsx      Lazy commit/contributor rating
+    TourView.tsx               Guided Tours modal
+    FileTree.tsx                 IDE-style folder/file browser
+    BookmarksPanel.tsx            Saved bookmarks list
+    CommandPalette.tsx             ⌘K search UI
+    FlowView.tsx                    Mermaid architecture-flow modal (pan/zoom)
+    PrPanel.tsx                      PR review mode
+    RateLimitFooter.tsx               Live GitHub API budget display
+    styles.ts                          All CSS as a template string (shadow root)
 
   lib/                    No React — pure logic, all independently testable
     types.ts               Shared types (RepoGraph, FileNode, Settings, ...)
-    github.ts               GitHub REST API client (tree, blobs, PR files)
+    github.ts               GitHub REST API client (tree, blobs, PR files, criticality)
     githubTheme.ts           Reads/watches GitHub's light/dark theme
-    cache.ts                 IndexedDB graph cache, keyed by commit SHA
-    settings.ts               chrome.storage.local wrapper for Settings
-    language.ts                Extension → language map, test-file heuristic
-    importExtract.ts            Regex import/export extraction per language
-    graphBuilder.ts               Builds the import graph; impact analysis;
-                                   related-tests lookup; entry-point detection
-    systems.ts                     Keyword-based "Core Systems" detection
-    find.ts                         Find X heuristic ranking
-    flow.ts                          BFS trace + mermaid diagram generation
-    tree.ts                          Flat paths → nested folder/file tree
-    bookmarks.ts                      Bookmark storage + URL classification
-    llm.ts                             Provider-agnostic streaming LLM client
-    prompts.ts                          All grounded LLM prompt templates
+    rateLimit.ts              Tracks X-RateLimit-* headers, exposes budget state
+    cache.ts                   IndexedDB graph cache, keyed by commit SHA
+    settings.ts                 chrome.storage.local wrapper for Settings
+    language.ts                  Extension → language map, test-file heuristic
+    importExtract.ts              Regex import/export extraction per language
+    graphBuilder.ts                 Import graph; impact analysis; related-tests;
+                                     entry-point detection
+    systems.ts                       Keyword-based Core Systems detection + confidence
+    tour.ts                           Guided Tours ordering (reuses flow.ts's BFS)
+    find.ts                            Find X heuristic ranking
+    flow.ts                             BFS trace + mermaid diagram generation
+    tree.ts                             Flat paths → nested folder/file tree
+    bookmarks.ts                         Bookmark storage + URL classification
+    symbols.ts                            Content-script relay to background parsing
+    llm.ts                                 Provider-agnostic streaming LLM client
+    prompts.ts                              All grounded LLM prompt templates
 
 src/options/               Settings page (PAT, LLM key, dock side, font)
 ```
 
 ### Tech stack
-TypeScript, React 19, Vite + `@crxjs/vite-plugin` (MV3 bundling with HMR),
-`idb` (IndexedDB wrapper), `mermaid` (lazy-loaded — see below).
+TypeScript, React 19, Vite + `@crxjs/vite-plugin` (MV3 bundling), `idb`
+(IndexedDB wrapper), `mermaid` (lazy-loaded), `web-tree-sitter` (pinned to
+0.25.x — see [docs/tree-sitter.md](docs/tree-sitter.md)).
 
 ---
 
 ## Performance notes
-- **Mermaid is lazy-loaded.** The full `mermaid` package bundles every
-  diagram type (gantt, sequence, C4, ER, ...) we don't use — about 2MB. It's
-  dynamically `import()`-ed only when a flow view actually opens, so the
-  always-shipped content-script bundle stays ~40KB gzipped.
-- **Shadow DOM isolation.** The whole UI renders inside a shadow root
-  (`src/content/main.tsx`), so its styles can never leak into or be
-  clobbered by GitHub's own CSS, and vice versa.
+- **Mermaid is lazy-loaded.** The full package bundles every diagram type we
+  don't use (~2MB); dynamically `import()`-ed only when a flow view opens,
+  so the always-shipped content-script bundle stays small.
+- **Shadow DOM isolation.** The whole UI renders inside a shadow root, so
+  its styles can never leak into or be clobbered by GitHub's own CSS.
 - **SPA-aware remounting.** GitHub navigates via Turbo without full page
   loads, which can swap the DOM and update the URL in either order — a naive
   "diff the URL on every DOM mutation" approach can miss navigations where
-  the swap happens before the URL settles, silently leaving the sidebar
-  unmounted until a hard refresh. `src/content/main.tsx` listens for Turbo's
-  own `turbo:load` event (fires only once a navigation is fully complete)
-  plus `popstate` for back/forward, with a `MutationObserver` kept as a
-  defensive fallback, all funneled through one idempotent `sync()` so
-  overlapping triggers can't double-mount or fight each other.
+  the swap happens before the URL settles. `src/content/main.tsx` listens
+  for Turbo's own `turbo:load` event plus `popstate`, with a
+  `MutationObserver` as a defensive fallback, funneled through one
+  idempotent `sync()`.
 
 ## Privacy
-- No telemetry, no analytics, nothing sent anywhere except: GitHub's own API
-  (to read repo data) and, only if you configure it, your chosen LLM
-  provider's API (for narrative features).
-- Your GitHub token and LLM key are stored in `chrome.storage.local` —
-  local to your browser profile, never synced to any server this project
-  controls (there isn't one).
-- Bookmarks and tree-expansion state are stored locally the same way.
+- No telemetry, no analytics — nothing sent anywhere except GitHub's own API
+  and, only if configured, your chosen LLM provider's API.
+- GitHub token and LLM key live in `chrome.storage.local` — local to your
+  browser profile, never synced anywhere this project controls (there isn't
+  a server to control).
+- Bookmarks and tree-expansion state stored locally the same way.
 
 ---
 
-## Known limitations (stated plainly, not glossed over)
-- **Real AST parsing** (confirmed working end-to-end in a real Chrome
-  install) **is scoped to one open file, JS/TS/TSX only.**
-  `src/background/symbols.ts` runs actual tree-sitter parsing for whichever
-  file you have open, extracting real functions/classes/call-sites — shown in
-  FilePanel as "Functions & classes · AST-parsed". This is **not** yet a
-  repo-wide, cross-file call graph (which needs cross-file symbol resolution
-  — imported names resolved to their exporting file's definitions — a
-  substantially harder correctness problem than single-file parsing).
-  File-level impact analysis still runs on the regex import graph everywhere
-  else. Other languages have no AST support and fall back to regex only,
-  silently and without error.
-  - **Why parsing runs in the background service worker, not the content
-    script**: getting this working surfaced five independent platform walls,
-    each real and confirmed via actual browser errors, not assumptions —
-    documented here because the failure modes are non-obvious and this is
-    exactly the kind of thing that silently breaks again on a dependency bump:
-    1. github.com's page CSP blocks `Worker` creation outright (`worker-src`
-       allow-lists only GitHub's own asset domains) — including the blob-URL
-       workaround, which is also just a Worker under the hood.
-    2. Moving to the background service worker, its default CSP still
-       blocked WebAssembly compilation (`script-src` without
-       `wasm-unsafe-eval`) — relaxed in `manifest.config.ts` (this is *our*
-       extension's own CSP, which we can configure, unlike GitHub's page CSP).
-    3. Vite's dynamic-`import()` wrapper assumes a DOM exists (injects
-       `<link rel=modulepreload>` for browser performance) and threw
-       `document is not defined`, then `window is not defined`, inside a
-       service worker (no DOM at all) — worked around with a minimal shim in
-       `src/background/domShim.ts`.
-    4. Dynamic `import()` itself is banned inside a running
-       `ServiceWorkerGlobalScope` by the HTML spec
-       ([w3c/ServiceWorker#1356](https://github.com/w3c/ServiceWorker/issues/1356))
-       — fixed by switching to a static top-level `import` in
-       `src/background/symbols.ts`, which service workers do support.
-    5. `web-tree-sitter@0.26.x` changed its WASM linking format in a way
-       that's incompatible with grammar files built by `tree-sitter-cli@0.20.x`
-       (what the `tree-sitter-wasms` package — our source for the `.wasm`
-       grammar files — uses), throwing `need dylink section`
-       ([tree-sitter/tree-sitter#5171](https://github.com/tree-sitter/tree-sitter/issues/5171))
-       — fixed by pinning `web-tree-sitter` to `^0.25.10`.
-    The content script sends the file's source to the background via
-    `chrome.runtime.sendMessage` and gets the parsed result back.
-- **Flow diagrams trace imports, not execution.** They show the *import*
-  graph outward from a node, not an actual request/execution lifecycle
-  (HTTP request → router → controller → service → DB). Real execution-flow
-  reconstruction needs call-graph resolution across framework layers.
-- **Core Systems detection is keyword-heuristic**, not semantic — matches
-  on path/filename keywords (e.g. "auth", "queue"), so it can miss
-  unconventionally-named code or mislabel something.
-- **No full-text code search** — Find X matches file paths and exported
-  symbol names, not arbitrary code content.
-- **Private repos**: work if your PAT has the `repo` scope (the client
-  already authenticates every request with it), but there's no OAuth
-  sign-in flow — you manage the token yourself via Settings.
-- **Not supported at all**: GitHub Enterprise (hardcoded to
-  `api.github.com`, no configurable base URL), multiple simultaneous
-  accounts, and there's no paid tier — everything here is free by design.
+## Known limitations
+- **Real AST parsing is scoped to one open file, JS/TS/TSX only** — not yet
+  a repo-wide, cross-file call graph (needs cross-file symbol resolution,
+  substantially harder than single-file parsing — deliberately not
+  attempted yet). File-level impact analysis runs on the regex import graph
+  everywhere else. Full engineering story, including five real platform
+  restrictions this surfaced: [docs/tree-sitter.md](docs/tree-sitter.md).
+- **Flow diagrams trace imports, not execution** — the *import* graph
+  outward from a node, not a real request/execution lifecycle. That needs
+  call-graph resolution across framework layers.
+- **Core Systems detection is keyword-heuristic**, not semantic — hence the
+  visible confidence score, which can (and should) read Low when the
+  evidence is thin.
+- **No full-text code search** — Find X matches paths and exported symbol
+  names, not arbitrary code content.
+- **Private repos** work with a PAT that has the `repo` scope, but there's
+  no OAuth sign-in flow — you manage the token yourself.
+- **Not supported**: GitHub Enterprise (hardcoded to `api.github.com`),
+  multiple simultaneous accounts, no paid tier — everything here is free by
+  design.
 
 ---
 
@@ -305,14 +267,15 @@ Developer mode → **Load unpacked** → select `dist/`.
 ## Settings
 
 Open the extension's options page (auto-opens on first install, or via
-`chrome://extensions` → Details → Extension options) to configure:
+`chrome://extensions` → Details → Extension options):
 
 | Setting | Effect | Required? |
 |---|---|---|
 | GitHub Personal Access Token | Raises the GitHub API rate limit from 60 to 5,000 req/hr; needed for private repos (`repo` scope) | No |
-| LLM Provider + API Key + Model | Unlocks Purpose, What Breaks, What Should I Test, and the Find X narrative | No |
+| LLM Provider + API Key + Model | Unlocks Purpose, Why Is This Here, What Breaks, What Should I Test, and the Find X narrative | No |
 | Sidebar dock position | Left or right edge | No (defaults right) |
 | Code font | System font or monospace | No (defaults system) |
 
-Every graph-based feature — Core Systems, file tree, impact analysis, flow
-diagrams, bookmarks, PR review — works with **zero configuration**.
+Every graph-based feature — Core Systems, Guided Tours, file tree, impact
+analysis, checklist, flow diagrams, bookmarks, PR review — works with
+**zero configuration**.
