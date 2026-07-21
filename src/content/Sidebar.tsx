@@ -13,6 +13,8 @@ import { CommandPalette } from './CommandPalette'
 import { PrPanel, usePrRef } from './PrPanel'
 import { FileTree } from './FileTree'
 import { BookmarksPanel } from './BookmarksPanel'
+import { HistoryPanel } from './HistoryPanel'
+import { OnboardingPanel } from './OnboardingPanel'
 import { RateLimitFooter } from './RateLimitFooter'
 import { TourView } from './TourView'
 import { styles } from './styles'
@@ -23,7 +25,7 @@ type View =
   | { kind: 'file'; path: string }
   | { kind: 'flow'; root: string }
   | { kind: 'tour'; root: string; label?: string }
-type HomeTab = 'map' | 'tree' | 'bookmarks'
+type HomeTab = 'map' | 'tree' | 'bookmarks' | 'recent'
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('cn-collapsed') === '1')
@@ -38,6 +40,7 @@ export function Sidebar() {
   const [dockSide, setDockSide] = useState<'left' | 'right'>('right')
   const [codeFont, setCodeFont] = useState<'sans' | 'mono'>('sans')
   const [theme, setTheme] = useState<Theme>(() => detectGitHubTheme())
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const [pinned, setPinned] = useState(() => localStorage.getItem('cn-pinned') === '1')
   const [pinnedWidth, setPinnedWidth] = useState(() => Number(localStorage.getItem('cn-pinned-width')) || 480)
   const pinnedWidthRef = useRef(pinnedWidth)
@@ -55,6 +58,7 @@ export function Sidebar() {
     getSettings().then((s) => {
       if (s.dockSide) setDockSide(s.dockSide)
       if (s.codeFont) setCodeFont(s.codeFont)
+      if (!s.onboardedAt) setShowOnboarding(true)
     })
   }, [])
 
@@ -264,10 +268,14 @@ export function Sidebar() {
                 <button className={`cn-tab ${homeTab === 'bookmarks' ? 'cn-tab-active' : ''}`} onClick={() => setHomeTab('bookmarks')}>
                   Bookmarks
                 </button>
+                <button className={`cn-tab ${homeTab === 'recent' ? 'cn-tab-active' : ''}`} onClick={() => setHomeTab('recent')}>
+                  Recent
+                </button>
               </div>
             )}
 
             <div className="cn-body">
+              {showOnboarding && <OnboardingPanel onDismiss={() => setShowOnboarding(false)} />}
               {prRef ? (
                 <PrPanel pr={prRef} />
               ) : (
@@ -313,6 +321,8 @@ export function Sidebar() {
                             <FileTree graph={graph} />
                           ) : homeTab === 'bookmarks' ? (
                             <BookmarksPanel repoKey={graph.repoKey} />
+                          ) : homeTab === 'recent' ? (
+                            <HistoryPanel repoKey={graph.repoKey} />
                           ) : (
                             <RepoMapView
                               graph={graph}
