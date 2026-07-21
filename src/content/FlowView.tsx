@@ -77,6 +77,14 @@ export function FlowView({ graph, root, onClose }: { graph: RepoGraph; root: str
           const width = viewBox?.[2] || svgEl.getBoundingClientRect().width || 800
           const height = viewBox?.[3] || svgEl.getBoundingClientRect().height || 400
           naturalSize.current = { width, height }
+          // Mermaid renders the SVG responsively (percentage/max-width based) by
+          // default, so its actual on-screen box before our transform is NOT
+          // guaranteed to equal the viewBox size we just measured — locking it
+          // to exact pixel dimensions here is what makes the fit-scale math
+          // (computed against viewBox numbers) actually correct.
+          svgEl.style.width = `${width}px`
+          svgEl.style.height = `${height}px`
+          svgEl.style.maxWidth = 'none'
           fitToViewport()
         }
       })

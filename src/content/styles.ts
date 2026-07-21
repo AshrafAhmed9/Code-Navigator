@@ -141,6 +141,12 @@ export const styles = `
 .cn-body::-webkit-scrollbar-thumb, .cn-modal::-webkit-scrollbar-thumb { background: var(--cn-scrollbar); border-radius: 8px; }
 .cn-body::-webkit-scrollbar-thumb:hover, .cn-modal::-webkit-scrollbar-thumb:hover { background: var(--cn-scrollbar-hover); }
 
+.cn-ratelimit {
+  flex-shrink: 0; padding: 7px 16px; font-size: 10.5px; color: var(--cn-muted-dim);
+  border-top: 1px solid var(--cn-hairline-soft); text-align: center;
+}
+.cn-ratelimit-low { color: var(--cn-warning); font-weight: 600; }
+
 .cn-header-actions { display: flex; align-items: center; gap: 2px; }
 .cn-bookmark-active { color: var(--cn-warning); }
 .cn-pin-active { color: var(--cn-accent); }
@@ -358,7 +364,7 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
 .cn-flow-viewport.cn-flow-dragging { cursor: grabbing; }
 .cn-flow-svg { transform-origin: center center; transition: transform 0.1s ease; }
 .cn-flow-dragging .cn-flow-svg { transition: none; }
-.cn-flow-svg svg { max-width: none; min-width: 500px; overflow: visible; }
+.cn-flow-svg svg { max-width: none; overflow: visible; display: block; }
 .cn-flow-svg .edgeLabel { background-color: transparent; }
 .cn-flow-svg foreignObject { overflow: visible; }
 .cn-flow-svg foreignObject div { display: flex !important; align-items: center; justify-content: center; width: 100%; height: 100%; }

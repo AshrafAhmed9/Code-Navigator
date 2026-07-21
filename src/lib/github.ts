@@ -1,4 +1,5 @@
 import type { RepoRef, RepoTree, TreeEntry } from './types'
+import { reportRateLimit, isRateLimitExhausted } from './rateLimit'
 
 const API = 'https://api.github.com'
 
@@ -18,7 +19,19 @@ function headers(pat?: string): HeadersInit {
 
 async function ghFetch(url: string, pat?: string): Promise<Response> {
   const res = await fetch(url, { headers: headers(pat) })
+  reportRateLimit(res.headers, !!pat)
+
   if (!res.ok) {
+    if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') {
+      const resetAt = Number(res.headers.get('x-ratelimit-reset') ?? 0) * 1000
+      const mins = resetAt ? Math.max(1, Math.ceil((resetAt - Date.now()) / 60000)) : null
+      throw new GitHubApiError(
+        pat
+          ? `GitHub API rate limit reached (5,000/hr). Resets in ${mins ?? 'a few'} min.`
+          : `GitHub API rate limit reached (60/hr without a token). Resets in ${mins ?? 'a few'} min — add a Personal Access Token in Settings for 5,000/hr.`,
+        403,
+      )
+    }
     const body = await res.text().catch(() => '')
     throw new GitHubApiError(`GitHub API ${res.status}: ${body.slice(0, 200)}`, res.status)
   }
@@ -123,6 +136,13 @@ export async function fetchFileContent(
   // overhead but has looser rate limits without a token, so prefer contents API
   // when a PAT is present (5k/hr) and fall back to raw otherwise.
   if (pat) {
+    // Only the authenticated Contents API spends api.github.com budget — stop
+    // calling it once exhausted instead of failing through every remaining
+    // file one by one. raw.githubusercontent.com below has its own separate
+    // limit and is unaffected.
+    if (isRateLimitExhausted()) {
+      throw new GitHubApiError('GitHub API rate limit reached — skipping remaining files', 403)
+    }
     const res = await ghFetch(
       `${API}/repos/${ref.owner}/${ref.repo}/contents/${encodeURIComponent(path)}?ref=${commitSha}`,
       pat,

@@ -13,6 +13,7 @@ import { CommandPalette } from './CommandPalette'
 import { PrPanel, usePrRef } from './PrPanel'
 import { FileTree } from './FileTree'
 import { BookmarksPanel } from './BookmarksPanel'
+import { RateLimitFooter } from './RateLimitFooter'
 import { styles } from './styles'
 
 type Status = 'idle' | 'resolving' | 'indexing' | 'ready' | 'error'
@@ -317,6 +318,7 @@ export function Sidebar() {
                 </>
               )}
             </div>
+            <RateLimitFooter onOpenOptions={() => chrome.runtime.openOptionsPage()} />
           </div>
         )}
       </div>

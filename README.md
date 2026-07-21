@@ -1,11 +1,15 @@
 # Code Navigator
 
-A Chrome extension that overlays github.com and answers the architecture
-questions you actually have when dropped into an unfamiliar repo: *Where does
-this start? Who depends on this? What breaks if I change it? What should I
-test?* — plus IDE-style navigation (file tree, bookmarks) so it also works
-as a daily GitHub browsing tool, not just a one-time "understand this repo"
-pass.
+Every developer has joined a repository where they had no idea where to
+start. Code Navigator reduces hours of clicking through files into minutes
+by reconstructing the repo's architecture, telling you the safest places to
+make a change, and showing exactly what that change will affect — directly
+inside GitHub, before you write a line of code.
+
+It's not a GitHub enhancement with dependency graphs bolted on. It's a
+**software architecture navigator**: every feature exists to answer one
+question — *can I understand this codebase and change it safely, in the
+next 15 minutes?*
 
 Everything runs **client-side, in the browser** — there is no backend and no
 hosting cost. It fetches files via the GitHub API, builds a real dependency
@@ -35,7 +39,10 @@ in that graph. Nothing is ever proxied through a server this project runs.
 - **Architecture flow diagrams** — traces the import graph outward from any
   entry point or search result (bounded to ~18 nodes / 4 levels deep so it
   stays readable) and renders it as an interactive mermaid flowchart: drag to
-  pan, scroll to zoom, a Fit button to reset. Opens at 50% zoom by default.
+  pan, scroll to zoom, a Fit button to reset. Opens fit-to-viewport by
+  default — the zoom is computed from the diagram's actual rendered size so
+  it's never cut off, with an upper cap so a tiny 2-node diagram doesn't
+  blow up to fill the whole screen.
 
 ### Make a safe change
 - **Per-file impact analysis** — referenced-by, imports, and the full
@@ -58,15 +65,19 @@ in that graph. Nothing is ever proxied through a server this project runs.
   head commit.
 
 ### Navigate like an IDE
-- **File tree** — the full repo file/folder browser (every file, not just
-  ones the import graph indexed), with live filter-as-you-type search that
-  auto-expands matching branches, per-language color-coded icons, smooth
-  expand/collapse animation, and VS-Code-style indent guide lines. Top-level
-  folders auto-expand on first open.
+- **File tree** (the default tab on open) — the full repo file/folder
+  browser (every file, not just ones the import graph indexed), with live
+  filter-as-you-type search that auto-expands matching branches,
+  per-language color-coded icons, smooth expand/collapse animation, and
+  VS-Code-style indent guide lines. Top-level folders auto-expand on first
+  open, and a home icon next to the search bar jumps back to the repo's
+  front page.
 - **Bookmarks** — star any file from the tree, or bookmark the current page
   from the sidebar header on *any* GitHub page (file, issue, PR, or repo
   root — detected from the URL). Stored locally, grouped by repo with an
   "other repos" section for everything else you've saved.
+- The Map / Tree / Bookmarks tabs all render at the **same fixed panel
+  size** — switching between them never resizes the sidebar.
 
 ### Fits how you actually browse
 - **Follows GitHub's own theme** — reads GitHub's `data-color-mode` /
@@ -128,7 +139,7 @@ src/
 
   content/                Injected into github.com via a shadow-DOM root
     main.tsx              Mount point; detects repo pages, remounts on
-                           GitHub's SPA (pjax) navigation
+                           GitHub's Turbo SPA navigation (turbo:load-based)
     Sidebar.tsx            Top-level UI state machine: repo indexing, tabs
                            (Map/Tree/Bookmarks), pin/dock/theme, view routing
     FilePanel.tsx          Per-file: referenced-by, impact, tests, exports
@@ -177,9 +188,15 @@ TypeScript, React 19, Vite + `@crxjs/vite-plugin` (MV3 bundling with HMR),
 - **Shadow DOM isolation.** The whole UI renders inside a shadow root
   (`src/content/main.tsx`), so its styles can never leak into or be
   clobbered by GitHub's own CSS, and vice versa.
-- **SPA-aware remounting.** GitHub navigates via pjax/Turbo without full
-  page loads; a `MutationObserver` on `document.body` detects path changes
-  and remounts the sidebar so it stays in sync without a hard refresh.
+- **SPA-aware remounting.** GitHub navigates via Turbo without full page
+  loads, which can swap the DOM and update the URL in either order — a naive
+  "diff the URL on every DOM mutation" approach can miss navigations where
+  the swap happens before the URL settles, silently leaving the sidebar
+  unmounted until a hard refresh. `src/content/main.tsx` listens for Turbo's
+  own `turbo:load` event (fires only once a navigation is fully complete)
+  plus `popstate` for back/forward, with a `MutationObserver` kept as a
+  defensive fallback, all funneled through one idempotent `sync()` so
+  overlapping triggers can't double-mount or fight each other.
 
 ## Privacy
 - No telemetry, no analytics, nothing sent anywhere except: GitHub's own API
