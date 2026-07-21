@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { parsePullRequestUrl, fetchPrInfo, resolveCommitSha, fetchRepoTree, type PrRef } from '../lib/github'
 import { buildImportGraph, computeImpact } from '../lib/graphBuilder'
 import { relatedTests } from '../lib/graphBuilder'
 import { getGraph, setGraph, graphKey } from '../lib/cache'
 import { getSettings } from '../lib/settings'
+import { detectCoreSystems } from '../lib/systems'
+import { buildExplainPrPrompt } from '../lib/prompts'
+import { NarrativePanel } from './NarrativePanel'
 import type { RepoGraph } from '../lib/types'
 
 type Status = 'idle' | 'loading' | 'ready' | 'error'
@@ -22,6 +25,7 @@ export function PrPanel({ pr }: { pr: PrRef }) {
   const [rows, setRows] = useState<PrImpact[]>([])
   const [graph, setGraphState] = useState<RepoGraph | null>(null)
   const [progress, setProgress] = useState({ done: 0, total: 0 })
+  const [prMeta, setPrMeta] = useState({ title: '', body: '' })
 
   useEffect(() => {
     let cancelled = false
@@ -29,8 +33,9 @@ export function PrPanel({ pr }: { pr: PrRef }) {
       try {
         setStatus('loading')
         const settings = await getSettings()
-        const { headSha, changedFiles } = await fetchPrInfo(pr, settings.githubPat)
+        const { headSha, changedFiles, title, body } = await fetchPrInfo(pr, settings.githubPat)
         if (cancelled) return
+        setPrMeta({ title, body })
 
         const key = graphKey(pr.owner, pr.repo, headSha)
         let g = await getGraph(key)
@@ -79,6 +84,14 @@ export function PrPanel({ pr }: { pr: PrRef }) {
   ).size
   const overallRisk = rows.some((r) => r.risk === 'HIGH') ? 'HIGH' : rows.some((r) => r.risk === 'MEDIUM') ? 'MEDIUM' : 'LOW'
 
+  const changedPaths = new Set(rows.map((r) => r.changedFile))
+  const affectedSystems = useMemo(
+    () => (graph ? detectCoreSystems(graph).filter((s) => s.files.some((f) => changedPaths.has(f.path))) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [graph, rows],
+  )
+  const reviewOrder = rows.map((r) => r.changedFile) // already sorted by affectedCount desc
+
   return (
     <div>
       <h3 className="cn-h3">PR Impact</h3>
@@ -95,6 +108,20 @@ export function PrPanel({ pr }: { pr: PrRef }) {
 
       {status === 'ready' && (
         <>
+          <NarrativePanel
+            label="Explain this PR"
+            deps={[graph, rows, prMeta]}
+            buildRequest={() =>
+              buildExplainPrPrompt(
+                prMeta.title,
+                prMeta.body,
+                rows.map((r) => ({ path: r.changedFile, risk: r.risk, affectedCount: r.affectedCount })),
+                affectedSystems,
+                reviewOrder,
+              )
+            }
+          />
+
           <div className="cn-section">
             <div className="cn-label">
               Overall risk

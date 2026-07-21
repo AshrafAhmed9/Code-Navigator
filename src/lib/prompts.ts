@@ -1,5 +1,6 @@
 import type { RepoGraph } from './types'
 import type { LlmRequest } from './llm'
+import type { SystemGroup } from './systems'
 
 const GROUNDING_SYSTEM = `You explain source code files inside a developer tool called Code Navigator.
 Ground every statement strictly in the evidence provided (the file's imports,
@@ -78,6 +79,37 @@ export function buildWhatToTestPrompt(
   return {
     system: GROUNDING_SYSTEM,
     prompt: `Recommend what to test before merging a change to ${path}, based only on the evidence below. If no test files were found by the import graph, say so plainly and suggest which untested affected files most need coverage, rather than inventing test file names.\n\n${evidence}`,
+  }
+}
+
+export interface PrChangedFile {
+  path: string
+  risk: string
+  affectedCount: number
+}
+
+export function buildExplainPrPrompt(
+  title: string,
+  body: string,
+  changedFiles: PrChangedFile[],
+  affectedSystems: SystemGroup[],
+  reviewOrder: string[],
+): LlmRequest {
+  const evidence = [
+    `PR title: ${title}`,
+    body ? `PR description:\n${body.slice(0, 1500)}` : 'PR description: (none provided)',
+    `Changed files (${changedFiles.length}):\n${changedFiles
+      .map((f) => `${f.path} — risk ${f.risk}, ${f.affectedCount} affected`)
+      .join('\n')}`,
+    affectedSystems.length > 0
+      ? `Core systems touched by this PR:\n${affectedSystems.map((s) => `${s.name} (${s.confidenceLabel} confidence)`).join('\n')}`
+      : 'Core systems touched: none matched by keyword detection',
+    `Suggested review order (highest-impact first, by import-graph fan-out):\n${reviewOrder.join('\n') || 'none'}`,
+  ].join('\n\n')
+
+  return {
+    system: GROUNDING_SYSTEM,
+    prompt: `Summarize this pull request for a reviewer, based only on the evidence below. In 3-5 sentences: (1) what the PR appears to do, inferred from the title/description/changed files, (2) which systems it touches, (3) overall risk, (4) a suggested order to review the files in. Do not invent files, systems, or intent not supported by the evidence.\n\n${evidence}`,
   }
 }
 

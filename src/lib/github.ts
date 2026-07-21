@@ -59,12 +59,16 @@ export function parsePullRequestUrl(url: string): PrRef | null {
 export interface PrInfo {
   headSha: string
   changedFiles: string[]
+  title: string
+  body: string
 }
 
 export async function fetchPrInfo(pr: PrRef, pat?: string): Promise<PrInfo> {
   const prRes = await ghFetch(`${API}/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`, pat)
   const prJson = await prRes.json()
   const headSha = prJson.head.sha as string
+  const title = (prJson.title as string) ?? ''
+  const body = (prJson.body as string) ?? ''
 
   const changedFiles: string[] = []
   let page = 1
@@ -79,7 +83,7 @@ export async function fetchPrInfo(pr: PrRef, pat?: string): Promise<PrInfo> {
     page++
   }
 
-  return { headSha, changedFiles }
+  return { headSha, changedFiles, title, body }
 }
 
 export async function resolveDefaultBranch(
