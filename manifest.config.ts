@@ -35,22 +35,13 @@ export default defineManifest({
   ],
   web_accessible_resources: [
     {
-      // Fetched from inside a Web Worker (src/content/parser.worker.ts), which
-      // is not extension-privileged the way the content script's main thread
-      // is — the worker can't call chrome.runtime.getURL itself, and its
-      // fetch() of a chrome-extension:// URL needs this declaration.
+      // Tree-sitter grammar files, fetched directly from the content script's
+      // main thread (see src/lib/symbols.ts — github.com's own CSP blocks
+      // worker-src entirely, so this can't run in a Worker; see that file's
+      // top comment for the full story). Declared explicitly rather than
+      // relying on the content script's extension privileges, since that
+      // assumption already burned us once this session on Worker construction.
       resources: ['wasm/*.wasm'],
-      matches: ['https://github.com/*'],
-    },
-    {
-      // The worker's own bundled JS chunk (parser.worker-<hash>.js) must also
-      // be web-accessible for `new Worker(chrome-extension://.../...)` to be
-      // allowed to load it from the content script. CRXJS auto-detects and
-      // declares chunks reachable via dynamic import() (e.g. mermaid's), but
-      // not chunks only reachable via `new Worker(new URL(...))` — so this
-      // has to be declared explicitly, as a wildcard since the hash changes
-      // every build.
-      resources: ['assets/*.js'],
       matches: ['https://github.com/*'],
     },
   ],

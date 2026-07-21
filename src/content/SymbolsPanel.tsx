@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import type { RepoGraph } from '../lib/types'
 import { fetchFileContent } from '../lib/github'
 import { getSettings } from '../lib/settings'
-import { isTreeSitterSupported, parseFileSymbols } from '../lib/symbols'
-import type { ParsedDefinition } from './parser.worker'
+import { isTreeSitterSupported, parseFileSymbols, type ParsedDefinition } from '../lib/symbols'
 
 const KIND_LABEL: Record<ParsedDefinition['kind'], string> = {
   function: 'function',
