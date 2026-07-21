@@ -160,8 +160,11 @@ Your GitHub token and LLM key never leave your browser. See
 ### Why client-side only
 No backend means: no hosting bill, nothing to keep online, and your GitHub
 token / LLM key never leave your browser except to their own providers
-(`api.github.com`, `api.anthropic.com`, `api.openai.com`). The tradeoff: a
-browser tab can't parse thousands of files upfront, so the design leans on:
+(`api.github.com`, `raw.githubusercontent.com`, `api.anthropic.com`,
+`api.openai.com` — each explicitly declared in `manifest.config.ts`'s
+`host_permissions`, which MV3 content scripts require for any cross-origin
+fetch to succeed at all). The tradeoff: a browser tab can't parse thousands
+of files upfront, so the design leans on:
 
 1. **Import-graph first, not full ASTs** for the whole repo (`src/lib/importExtract.ts`,
    regex-based) — cheap, works across languages without per-language
@@ -198,6 +201,16 @@ failure modes are guarded against directly rather than hoped around:
   slower per-file content indexing that builds the dependency graph
   finishes. The whole panel no longer blocks on the slowest step just to
   show the tabs that don't need it.
+- **The zero-setup path is actually exercised.** `raw.githubusercontent.com`
+  — the fetch path used for every file when no GitHub token is configured —
+  is declared in `host_permissions`; without it, MV3 blocks the content
+  script from fetching it at all, which would have silently broken indexing
+  for exactly the keyless users this project is built to work for by
+  default.
+- **LLM calls use the token-limit parameter each provider actually
+  accepts.** OpenAI's GPT-5/o1/o3 reject `max_tokens` outright and require
+  `max_completion_tokens` instead (`src/lib/llm.ts` uses the latter, which
+  is also accepted by GPT-4/4o).
 
 ### Priorities: quality over speed, always
 Every claim (impact counts, "what breaks," search rankings) is **grounded in
@@ -351,7 +364,7 @@ Open the extension's options page (auto-opens on first install, or via
 | Setting | Effect | Required? |
 |---|---|---|
 | GitHub Personal Access Token | Raises the GitHub API rate limit from 60 to 5,000 req/hr; needed for private repos (`repo` scope) | No |
-| LLM Provider + API Key + Model | Unlocks Purpose, Why Is This Here, What Breaks, What Should I Test, and the Find X narrative | No |
+| LLM Provider + API Key + Model | Unlocks Purpose, Why Is This Here, What Breaks, What Should I Test, Explain This PR, and the Find X narrative | No |
 | Sidebar dock position | Left or right edge | No (defaults right) |
 | Code font | System font or monospace | No (defaults system) |
 
