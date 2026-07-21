@@ -46,6 +46,12 @@ export default defineManifest({
   permissions: ['storage', 'unlimitedStorage'],
   host_permissions: [
     'https://api.github.com/*',
+    // Used for every file-content fetch when no GitHub token is configured
+    // (src/lib/github.ts's fetchFileContent) — i.e. the default, zero-setup
+    // path this project advertises throughout. MV3 content scripts need
+    // their target host declared here to make a cross-origin fetch to it at
+    // all; without this, every unauthenticated file fetch would fail.
+    'https://raw.githubusercontent.com/*',
     'https://api.anthropic.com/*',
     'https://api.openai.com/*',
   ],
