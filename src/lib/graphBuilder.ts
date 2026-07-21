@@ -21,7 +21,34 @@ export function buildSkeletonGraph(ref: Pick<RepoRef, 'owner' | 'repo'>, commitS
     entryPoints: [],
     languageBreakdown: {},
     allPaths: tree.entries.filter((e) => e.type === 'blob').map((e) => e.path),
+    indexedFileCount: 0,
+    totalCodeFileCount: 0,
   }
+}
+
+/**
+ * Fetching and parsing every code file is one HTTP round-trip each — on a
+ * repo with tens of thousands of files, no realistic concurrency finishes in
+ * a reasonable time, and pushing concurrency higher risks tripping GitHub's
+ * secondary (abuse-detection) rate limit regardless of the primary budget.
+ * Past this many code files, indexing is bounded to a prioritized subset
+ * instead of "eventually, everything" — reliability means a predictable
+ * finish time on any repo size, not a technically-complete graph that never
+ * arrives.
+ */
+const MAX_INDEXED_FILES = 1500
+
+/** Entry-point-shaped files first, then shallower paths — a cheap proxy for "more central" before any real graph data exists yet. */
+function prioritizeForIndexing(paths: string[]): string[] {
+  const ENTRY_HINT = /(^|\/)(main|index|app|server|cmd)\.[a-z]+$/i
+  return [...paths].sort((a, b) => {
+    const aEntry = ENTRY_HINT.test(a) ? 0 : 1
+    const bEntry = ENTRY_HINT.test(b) ? 0 : 1
+    if (aEntry !== bEntry) return aEntry - bEntry
+    const depthDiff = a.split('/').length - b.split('/').length
+    if (depthDiff !== 0) return depthDiff
+    return a.localeCompare(b)
+  })
 }
 
 /**
@@ -42,6 +69,16 @@ export async function buildImportGraph(
     .filter((p) => !isVendoredOrGenerated(p))
     .filter((p) => CODE_EXTENSIONS.has(p.split('.').pop()?.toLowerCase() ?? ''))
 
+  const totalCodeFileCount = codePaths.length
+  const pathsToFetch = totalCodeFileCount > MAX_INDEXED_FILES
+    ? prioritizeForIndexing(codePaths).slice(0, MAX_INDEXED_FILES)
+    : codePaths
+  const fetchSet = new Set(pathsToFetch)
+
+  // Every code path counts as a valid import-resolution target, even the ones
+  // whose own content isn't being fetched this pass — otherwise a fetched
+  // file that imports a skipped one would silently lose that edge instead of
+  // just not knowing the skipped file's own imports.
   const allPathSet = new Set(codePaths)
   // Each file is its own HTTP round-trip, so concurrency — not bandwidth — is
   // what dominates wall-clock time on large repos. A PAT'd request uses the
@@ -49,15 +86,16 @@ export async function buildImportGraph(
   // more parallel fetches than the unauthenticated raw.githubusercontent.com
   // path without either one starving the other's separate rate limit.
   const concurrency = pat ? 24 : 12
-  const contents = await fetchManyFiles(ref, commitSha, codePaths, pat, concurrency, onProgress)
+  const contents = await fetchManyFiles(ref, commitSha, pathsToFetch, pat, concurrency, onProgress)
 
   const files: Record<string, FileNode> = {}
   const languageBreakdown: Record<string, number> = {}
 
   for (const path of codePaths) {
-    const source = contents.get(path)
     const language = detectLanguage(path)
     languageBreakdown[language] = (languageBreakdown[language] ?? 0) + 1
+
+    const source = fetchSet.has(path) ? contents.get(path) : undefined
     if (source === undefined) {
       files[path] = { path, language, imports: [], importedBy: [], exportedSymbols: [], size: 0 }
       continue
@@ -94,6 +132,8 @@ export async function buildImportGraph(
     entryPoints,
     languageBreakdown,
     allPaths,
+    indexedFileCount: pathsToFetch.length,
+    totalCodeFileCount,
   }
 }
 

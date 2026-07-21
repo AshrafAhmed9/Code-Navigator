@@ -437,12 +437,20 @@ function RepoMapView({
 }) {
   const topFiles = mostDependedOn(graph, 5)
   const totalFiles = Object.keys(graph.files).length
+  const capped = graph.totalCodeFileCount > graph.indexedFileCount
   const systems = useMemo(() => detectCoreSystems(graph), [graph])
 
   return (
     <div>
       <h3 className="cn-h3">Understand this repository</h3>
       <div className="cn-stat">{totalFiles} files indexed</div>
+      {capped && (
+        <div className="cn-muted" style={{ marginBottom: 8 }}>
+          Repo has {graph.totalCodeFileCount.toLocaleString()} code files — too many to fully index quickly, so
+          the {graph.indexedFileCount.toLocaleString()} most likely-central files (entry points and shallower
+          paths first) were prioritized. The dependency graph and impact analysis only cover those.
+        </div>
+      )}
 
       {systems.length > 0 && (
         <div className="cn-section">

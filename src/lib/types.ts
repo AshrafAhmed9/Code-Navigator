@@ -46,7 +46,7 @@ export type Language =
  * useMemo, which React has no way to recover from short of unmounting the
  * whole sidebar. See src/lib/cache.ts.
  */
-export const REPO_GRAPH_SCHEMA_VERSION = 2
+export const REPO_GRAPH_SCHEMA_VERSION = 3
 
 export interface RepoGraph {
   schemaVersion: number
@@ -58,6 +58,10 @@ export interface RepoGraph {
   languageBreakdown: Record<string, number>
   /** Every blob path in the repo tree, not just indexed code files — powers the file tree browser. */
   allPaths: string[]
+  /** How many code files actually had their content fetched/parsed — may be less than totalCodeFileCount on very large repos. */
+  indexedFileCount: number
+  /** Code files that matched an indexable extension, before any size cap was applied. */
+  totalCodeFileCount: number
 }
 
 export interface Settings {
