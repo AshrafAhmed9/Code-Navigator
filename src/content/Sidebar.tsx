@@ -59,7 +59,11 @@ export function Sidebar() {
     getSettings().then((s) => {
       if (s.dockSide) setDockSide(s.dockSide)
       if (s.codeFont) setCodeFont(s.codeFont)
-      if (!s.onboardedAt) setShowOnboarding(true)
+      // Only a genuinely first-time user (no token, no LLM key, never dismissed)
+      // should see this — someone who already configured settings directly via
+      // the options page (skipping the onboarding button) shouldn't see it pop
+      // up on every visit just because onboardedAt was never separately set.
+      if (!s.onboardedAt && !s.githubPat && !s.llmApiKey) setShowOnboarding(true)
     })
   }, [])
 
@@ -234,6 +238,12 @@ export function Sidebar() {
               )}
               <div className="cn-header-actions">
                 <PageBookmarkButton />
+                <button className="cn-collapse-btn" onClick={openOptionsPage} title="Settings — GitHub token & LLM key">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
                 <button
                   className={`cn-collapse-btn ${pinned ? 'cn-pin-active' : ''}`}
                   onClick={togglePinned}
