@@ -69,8 +69,8 @@ export function FilePanel({ graph, path }: { graph: RepoGraph; path: string }) {
         </div>
         {file.importedBy.length === 0 && <div className="cn-muted">No known in-repo importers.</div>}
         {file.importedBy.slice(0, 8).map((p) => (
-          <a key={p} className="cn-file-row cn-link" href={blobUrl(graph, p)}>
-            {p}
+          <a key={p} className="cn-file-row cn-link" href={blobUrl(graph, p)} title={p}>
+            <span className="cn-file-path">{p}</span>
           </a>
         ))}
       </div>
@@ -80,8 +80,8 @@ export function FilePanel({ graph, path }: { graph: RepoGraph; path: string }) {
           Imports <span className="cn-badge">{file.imports.length}</span>
         </div>
         {file.imports.slice(0, 8).map((p) => (
-          <a key={p} className="cn-file-row cn-link" href={blobUrl(graph, p)}>
-            {p}
+          <a key={p} className="cn-file-row cn-link" href={blobUrl(graph, p)} title={p}>
+            <span className="cn-file-path">{p}</span>
           </a>
         ))}
       </div>
@@ -105,8 +105,8 @@ export function FilePanel({ graph, path }: { graph: RepoGraph; path: string }) {
                   {g.area} <span className="cn-badge">{g.paths.length}</span>
                 </div>
                 {g.paths.slice(0, 6).map((p) => (
-                  <a key={p} className="cn-file-row cn-link" href={blobUrl(graph, p)}>
-                    {p}
+                  <a key={p} className="cn-file-row cn-link" href={blobUrl(graph, p)} title={p}>
+                    <span className="cn-file-path">{p}</span>
                   </a>
                 ))}
               </div>
@@ -123,8 +123,8 @@ export function FilePanel({ graph, path }: { graph: RepoGraph; path: string }) {
           <div className="cn-muted">No test file imports this or an affected file, by the import graph.</div>
         )}
         {tests.map((p) => (
-          <a key={p} className="cn-file-row cn-link" href={blobUrl(graph, p)}>
-            {p}
+          <a key={p} className="cn-file-row cn-link" href={blobUrl(graph, p)} title={p}>
+            <span className="cn-file-path">{p}</span>
           </a>
         ))}
       </div>

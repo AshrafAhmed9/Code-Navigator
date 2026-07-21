@@ -141,8 +141,9 @@ export function PrPanel({ pr }: { pr: PrRef }) {
                 <a
                   className="cn-file-row cn-link"
                   href={`https://github.com/${pr.owner}/${pr.repo}/blob/${graph?.commitSha ?? ''}/${r.changedFile}`}
+                  title={r.changedFile}
                 >
-                  {r.changedFile}
+                  <span className="cn-file-path">{r.changedFile}</span>
                 </a>
                 {r.inGraph ? (
                   <span className={`cn-risk cn-risk-${r.risk.toLowerCase()}`}>

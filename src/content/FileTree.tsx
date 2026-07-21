@@ -28,7 +28,7 @@ function defaultExpanded(tree: TreeNode[]): Set<string> {
 }
 
 export function FileTree({ graph }: { graph: RepoGraph }) {
-  const tree = useMemo(() => buildFileTree(graph.allPaths), [graph])
+  const tree = useMemo(() => buildFileTree(graph.allPaths ?? []), [graph])
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     try {

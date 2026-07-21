@@ -1,4 +1,5 @@
 import type { RepoRef, RepoTree, RepoGraph, FileNode } from './types'
+import { REPO_GRAPH_SCHEMA_VERSION } from './types'
 import { detectLanguage, isVendoredOrGenerated, isLikelyTestFile, CODE_EXTENSIONS } from './language'
 import { extractImportSpecifiers, resolveRelativeImport, extractExportedSymbols } from './importExtract'
 import { fetchManyFiles } from './github'
@@ -59,6 +60,7 @@ export async function buildImportGraph(
   const entryPoints = detectEntryPoints(files)
 
   return {
+    schemaVersion: REPO_GRAPH_SCHEMA_VERSION,
     repoKey: `${ref.owner}/${ref.repo}`,
     commitSha,
     builtAt: Date.now(),

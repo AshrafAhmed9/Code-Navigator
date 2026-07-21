@@ -38,7 +38,18 @@ export type Language =
   | 'rs'
   | 'other'
 
+/**
+ * Bump this whenever RepoGraph's shape changes (new/renamed/removed fields).
+ * A graph cached under an older schema version is discarded rather than used
+ * as-is — reading a stale shape (e.g. a graph cached before `allPaths`
+ * existed) crashes downstream code with "X is not iterable" deep inside a
+ * useMemo, which React has no way to recover from short of unmounting the
+ * whole sidebar. See src/lib/cache.ts.
+ */
+export const REPO_GRAPH_SCHEMA_VERSION = 2
+
 export interface RepoGraph {
+  schemaVersion: number
   repoKey: string // owner/repo
   commitSha: string
   builtAt: number

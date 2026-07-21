@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { parseRepoUrl, resolveCommitSha, fetchRepoTree } from '../lib/github'
 import { buildImportGraph, mostDependedOn } from '../lib/graphBuilder'
-import { getGraph, setGraph, graphKey } from '../lib/cache'
+import { getGraph, setGraph, deleteGraph, graphKey } from '../lib/cache'
 import { getSettings, saveSettings } from '../lib/settings'
 import { detectCoreSystems } from '../lib/systems'
 import { detectGitHubTheme, watchGitHubTheme, type Theme } from '../lib/githubTheme'
@@ -15,6 +15,7 @@ import { FileTree } from './FileTree'
 import { BookmarksPanel } from './BookmarksPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { OnboardingPanel } from './OnboardingPanel'
+import { ErrorBoundary } from './ErrorBoundary'
 import { openOptionsPage } from '../lib/openOptions'
 import { RateLimitFooter } from './RateLimitFooter'
 import { TourView } from './TourView'
@@ -121,6 +122,11 @@ export function Sidebar() {
       cancelled = true
     }
   }, [ref, prRef])
+
+  function invalidateGraph(repoKey: string, commitSha: string) {
+    const [owner, repo] = repoKey.split('/')
+    deleteGraph(graphKey(owner, repo, commitSha)).finally(() => window.location.reload())
+  }
 
   function toggle() {
     setCollapsed((c) => {
@@ -288,7 +294,9 @@ export function Sidebar() {
             <div className="cn-body">
               {showOnboarding && <OnboardingPanel onDismiss={() => setShowOnboarding(false)} />}
               {prRef ? (
-                <PrPanel pr={prRef} />
+                <ErrorBoundary key={`${prRef.owner}/${prRef.repo}#${prRef.number}`}>
+                  <PrPanel pr={prRef} />
+                </ErrorBoundary>
               ) : (
                 <>
                   {status === 'resolving' && (
@@ -315,7 +323,7 @@ export function Sidebar() {
                   )}
                   {status === 'error' && <div className="cn-error-block">{error}</div>}
                   {status === 'ready' && graph && (
-                    <>
+                    <ErrorBoundary key={graph.repoKey + graph.commitSha} onReset={() => invalidateGraph(graph.repoKey, graph.commitSha)}>
                       {view.kind === 'file' && graph.files[view.path] ? (
                         <FilePanel graph={graph} path={view.path} />
                       ) : (
@@ -343,7 +351,7 @@ export function Sidebar() {
                           )}
                         </>
                       )}
-                    </>
+                    </ErrorBoundary>
                   )}
                 </>
               )}
@@ -449,7 +457,7 @@ function RepoMapView({
                 <div className="cn-confidence-reason">{s.reason}</div>
                 {s.files.slice(0, 3).map((f) => (
                   <div key={f.path} className="cn-file-row cn-system-file">
-                    {f.path}
+                    <span className="cn-file-path" title={f.path}>{f.path}</span>
                   </div>
                 ))}
                 <button className="cn-flow-btn cn-tour-trigger" onClick={() => onOpenTour(s.files[0].path, s.name)}>
