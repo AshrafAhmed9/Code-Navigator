@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { RepoGraph } from '../lib/types'
-import { buildFileTree, ancestorPaths, type TreeNode, type TreeFolderNode } from '../lib/tree'
+import { buildFileTree, ancestorPaths, type TreeNode } from '../lib/tree'
 import { toggleBookmark, isBookmarked, type Bookmark } from '../lib/bookmarks'
 import { detectLanguage } from '../lib/language'
 
@@ -22,20 +22,19 @@ function blobUrl(graph: RepoGraph, path: string): string {
   return `https://github.com/${owner}/${repo}/blob/${graph.commitSha}/${path}`
 }
 
-/** First time a repo's tree is opened, expand the top level so it isn't a wall of collapsed rows. */
-function defaultExpanded(tree: TreeNode[]): Set<string> {
-  return new Set(tree.filter((n): n is TreeFolderNode => n.kind === 'folder').map((n) => n.path))
-}
-
 export function FileTree({ graph }: { graph: RepoGraph }) {
   const tree = useMemo(() => buildFileTree(graph.allPaths ?? []), [graph])
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(() => {
+    // Closed by default — on a repo with several root folders, auto-expanding
+    // the top level turned the tree into a long wall of rows the user had to
+    // scroll past just to see the folder list. A saved expansion state (from
+    // manually opening folders on a previous visit) still takes precedence.
     try {
       const saved = localStorage.getItem(`cn-tree-expanded:${graph.repoKey}`)
-      return saved ? new Set(JSON.parse(saved)) : defaultExpanded(tree)
+      return saved ? new Set(JSON.parse(saved)) : new Set<string>()
     } catch {
-      return defaultExpanded(tree)
+      return new Set<string>()
     }
   })
 
