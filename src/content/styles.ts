@@ -319,10 +319,11 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
 .cn-system-row:last-child { border-bottom: none; }
 .cn-system-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .cn-system-name { font-weight: 600; font-size: 13px; color: var(--cn-text); }
-.cn-confidence { font-size: 9.5px; font-weight: 650; padding: 2px 7px; border-radius: 8px; flex-shrink: 0; white-space: nowrap; cursor: help; }
+.cn-confidence { font-size: 9.5px; font-weight: 650; padding: 2px 7px; border-radius: 8px; flex-shrink: 0; white-space: nowrap; }
 .cn-confidence-high { background: var(--cn-success-soft); color: var(--cn-success); }
 .cn-confidence-medium { background: var(--cn-warning-soft); color: var(--cn-warning); }
 .cn-confidence-low { background: rgba(255,255,255,0.06); color: var(--cn-muted); }
+.cn-confidence-reason { font-size: 10.5px; color: var(--cn-muted-dim); margin-bottom: 6px; }
 .cn-system-file { padding-left: 10px; color: var(--cn-muted); border-bottom: none; padding-top: 2px; padding-bottom: 2px; font-size: 11.5px; }
 .cn-entry-row { }
 .cn-area-label { font-weight: 600; font-size: 12px; color: var(--cn-text); }

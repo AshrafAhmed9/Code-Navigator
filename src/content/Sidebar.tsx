@@ -421,13 +421,11 @@ function RepoMapView({
               <div key={s.name} className="cn-system-row">
                 <div className="cn-system-header">
                   <div className="cn-system-name">{s.name}</div>
-                  <span
-                    className={`cn-confidence cn-confidence-${s.confidenceLabel.toLowerCase()}`}
-                    title={s.reason}
-                  >
+                  <span className={`cn-confidence cn-confidence-${s.confidenceLabel.toLowerCase()}`}>
                     {s.confidenceLabel} confidence
                   </span>
                 </div>
+                <div className="cn-confidence-reason">{s.reason}</div>
                 {s.files.slice(0, 3).map((f) => (
                   <div key={f.path} className="cn-file-row cn-system-file">
                     {f.path}
