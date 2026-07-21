@@ -167,6 +167,9 @@ export const styles = `
 
 .cn-section { margin-top: 20px; }
 .cn-section:first-of-type { margin-top: 16px; }
+.cn-onboarding { margin-bottom: 20px; padding: 14px; border-radius: 12px; background: var(--cn-card); border: 1px solid var(--cn-hairline-soft); }
+.cn-onboarding p { margin: 0 0 8px 0; }
+.cn-onboarding p:last-of-type { margin-bottom: 0; }
 .cn-label {
   font-weight: 600; font-size: 12px; letter-spacing: -0.05px;
   color: var(--cn-muted); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;

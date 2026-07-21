@@ -15,6 +15,7 @@ import { FileTree } from './FileTree'
 import { BookmarksPanel } from './BookmarksPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { OnboardingPanel } from './OnboardingPanel'
+import { openOptionsPage } from '../lib/openOptions'
 import { RateLimitFooter } from './RateLimitFooter'
 import { TourView } from './TourView'
 import { styles } from './styles'
@@ -337,7 +338,7 @@ export function Sidebar() {
                 </>
               )}
             </div>
-            <RateLimitFooter onOpenOptions={() => chrome.runtime.openOptionsPage()} />
+            <RateLimitFooter onOpenOptions={openOptionsPage} />
           </div>
         )}
       </div>
@@ -507,5 +508,5 @@ function extractFilePathFromUrl(pathname: string, ref: ReturnType<typeof parseRe
 
 function openOptions(e: React.MouseEvent) {
   e.preventDefault()
-  chrome.runtime.openOptionsPage()
+  openOptionsPage()
 }

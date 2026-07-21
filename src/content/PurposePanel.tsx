@@ -4,6 +4,7 @@ import { getSettings } from '../lib/settings'
 import { isLlmConfigured, streamCompletion } from '../lib/llm'
 import { buildFilePurposePrompt } from '../lib/prompts'
 import { fetchFileContent } from '../lib/github'
+import { openOptionsPage } from '../lib/openOptions'
 
 type State =
   | { kind: 'unconfigured' }
@@ -87,5 +88,5 @@ export function PurposePanel({ graph, path }: { graph: RepoGraph; path: string }
 
 function openOptions(e: React.MouseEvent) {
   e.preventDefault()
-  chrome.runtime.openOptionsPage()
+  openOptionsPage()
 }

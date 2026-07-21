@@ -1,4 +1,5 @@
 import { getSettings, saveSettings } from '../lib/settings'
+import { openOptionsPage } from '../lib/openOptions'
 
 export function OnboardingPanel({ onDismiss }: { onDismiss: () => void }) {
   async function dismiss() {
@@ -8,7 +9,7 @@ export function OnboardingPanel({ onDismiss }: { onDismiss: () => void }) {
 
   function openOptions(e: React.MouseEvent) {
     e.preventDefault()
-    chrome.runtime.openOptionsPage()
+    openOptionsPage()
     dismiss()
   }
 

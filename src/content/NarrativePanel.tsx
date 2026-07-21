@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { getSettings } from '../lib/settings'
 import { isLlmConfigured, streamCompletion } from '../lib/llm'
 import type { LlmRequest } from '../lib/llm'
+import { openOptionsPage } from '../lib/openOptions'
 
 type State =
   | { kind: 'unconfigured' }
@@ -90,5 +91,5 @@ export function NarrativePanel({
 
 function openOptions(e: React.MouseEvent) {
   e.preventDefault()
-  chrome.runtime.openOptionsPage()
+  openOptionsPage()
 }
