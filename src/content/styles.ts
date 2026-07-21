@@ -92,6 +92,7 @@ export const styles = `
 .cn-panel {
   position: relative;
   width: 344px;
+  height: 80vh;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -348,14 +349,14 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
   border: 1px solid var(--cn-hairline-soft);
   border-radius: 14px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 8px;
   cursor: grab;
   touch-action: none;
 }
 .cn-flow-viewport.cn-flow-dragging { cursor: grabbing; }
-.cn-flow-svg { transform-origin: top center; transition: transform 0.1s ease; }
+.cn-flow-svg { transform-origin: center center; transition: transform 0.1s ease; }
 .cn-flow-dragging .cn-flow-svg { transition: none; }
 .cn-flow-svg svg { max-width: none; min-width: 500px; overflow: visible; }
 .cn-flow-svg .edgeLabel { background-color: transparent; }
@@ -373,7 +374,7 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
 
 /* Pinned mode: full-height side panel instead of a floating centered card */
 .cn-root.cn-pinned { top: 0; transform: none; height: 100vh; align-items: stretch; }
-.cn-root.cn-pinned .cn-panel { max-height: 100vh; border-radius: 0; box-shadow: -8px 0 32px rgba(0,0,0,0.35); }
+.cn-root.cn-pinned .cn-panel { height: 100vh; max-height: 100vh; border-radius: 0; box-shadow: -8px 0 32px rgba(0,0,0,0.35); }
 .cn-root.cn-pinned.cn-dock-left .cn-panel { box-shadow: 8px 0 32px rgba(0,0,0,0.35); }
 .cn-root.cn-pinned .cn-toggle { display: none; }
 
@@ -397,6 +398,12 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
 /* Pinned + dock-left both active: keep flat edges, overriding the rounded dock-left corners above (later rule wins on equal specificity). */
 .cn-root.cn-pinned.cn-dock-left .cn-panel { border-radius: 0; box-shadow: 8px 0 32px rgba(0,0,0,0.35); }
 
+.cn-tree-repo-root {
+  display: flex; align-items: center; gap: 7px; padding: 8px 10px; margin-bottom: 10px;
+  border-radius: 10px; background: var(--cn-card); color: var(--cn-text); text-decoration: none;
+  font-size: 12.5px; font-weight: 600; border: 1px solid var(--cn-hairline-soft); transition: background 0.15s ease;
+}
+.cn-tree-repo-root:hover { background: var(--cn-card-hover); color: var(--cn-accent); }
 .cn-tree-search {
   width: 100%; padding: 8px 12px; font-size: 12.5px; border: 1px solid var(--cn-hairline-soft);
   border-radius: 10px; background: var(--cn-inset-bg); color: var(--cn-text); outline: none;

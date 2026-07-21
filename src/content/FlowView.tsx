@@ -23,7 +23,7 @@ function loadMermaid() {
 
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 4
-const FIT_MARGIN = 0.9 // leave a little breathing room around the diagram
+const FIT_MARGIN = 0.97 // almost fill the viewport — minimal empty space around the diagram
 
 /**
  * Rendered as a full-screen overlay (not embedded in the narrow sidebar) so the
@@ -73,8 +73,7 @@ export function FlowView({ graph, root, onClose }: { graph: RepoGraph; root: str
           const width = viewBox?.[2] || svgEl.getBoundingClientRect().width || 800
           const height = viewBox?.[3] || svgEl.getBoundingClientRect().height || 400
           naturalSize.current = { width, height }
-          setZoom(0.5)
-          setPan({ x: 0, y: 0 })
+          fitToViewport()
         }
       })
       .catch((e) => {
@@ -83,7 +82,7 @@ export function FlowView({ graph, root, onClose }: { graph: RepoGraph; root: str
     return () => {
       cancelled = true
     }
-  }, [graph, root])
+  }, [graph, root, fitToViewport])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
