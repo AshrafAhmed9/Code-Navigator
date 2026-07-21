@@ -28,7 +28,7 @@ export function Sidebar() {
   const [hasPat, setHasPat] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [view, setView] = useState<View>({ kind: 'repo-map' })
-  const [homeTab, setHomeTab] = useState<HomeTab>('map')
+  const [homeTab, setHomeTab] = useState<HomeTab>('tree')
   const [dockSide, setDockSide] = useState<'left' | 'right'>('right')
   const [codeFont, setCodeFont] = useState<'sans' | 'mono'>('sans')
   const [theme, setTheme] = useState<Theme>(() => detectGitHubTheme())

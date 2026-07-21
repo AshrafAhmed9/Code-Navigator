@@ -398,16 +398,17 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
 /* Pinned + dock-left both active: keep flat edges, overriding the rounded dock-left corners above (later rule wins on equal specificity). */
 .cn-root.cn-pinned.cn-dock-left .cn-panel { border-radius: 0; box-shadow: 8px 0 32px rgba(0,0,0,0.35); }
 
-.cn-tree-repo-root {
-  display: flex; align-items: center; gap: 7px; padding: 8px 10px; margin-bottom: 10px;
-  border-radius: 10px; background: var(--cn-card); color: var(--cn-text); text-decoration: none;
-  font-size: 12.5px; font-weight: 600; border: 1px solid var(--cn-hairline-soft); transition: background 0.15s ease;
+.cn-tree-search-row { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.cn-tree-home {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 32px; height: 32px; border-radius: 10px; background: var(--cn-card); color: var(--cn-muted);
+  border: 1px solid var(--cn-hairline-soft); transition: background 0.15s ease, color 0.15s ease;
 }
-.cn-tree-repo-root:hover { background: var(--cn-card-hover); color: var(--cn-accent); }
+.cn-tree-home:hover { background: var(--cn-card-hover); color: var(--cn-accent); }
 .cn-tree-search {
-  width: 100%; padding: 8px 12px; font-size: 12.5px; border: 1px solid var(--cn-hairline-soft);
+  flex: 1; min-width: 0; padding: 8px 12px; font-size: 12.5px; border: 1px solid var(--cn-hairline-soft);
   border-radius: 10px; background: var(--cn-inset-bg); color: var(--cn-text); outline: none;
-  margin-bottom: 10px; box-sizing: border-box; transition: border-color 0.15s ease;
+  box-sizing: border-box; transition: border-color 0.15s ease;
 }
 .cn-tree-search::placeholder { color: var(--cn-muted-dim); }
 .cn-tree-search:focus { border-color: var(--cn-accent); }

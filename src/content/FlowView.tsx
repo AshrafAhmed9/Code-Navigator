@@ -21,8 +21,9 @@ function loadMermaid() {
   return mermaidReady
 }
 
-const MIN_ZOOM = 0.1
+const MIN_ZOOM = 0.05
 const MAX_ZOOM = 4
+const FIT_MAX_ZOOM = 1.5 // cap how large a *fit* can zoom a tiny diagram — big diagrams still shrink as far as needed
 const FIT_MARGIN = 0.97 // almost fill the viewport — minimal empty space around the diagram
 
 /**
@@ -48,7 +49,10 @@ export function FlowView({ graph, root, onClose }: { graph: RepoGraph; root: str
     const { width, height } = naturalSize.current
     if (!viewport || !width || !height) return
     const scale = Math.min((viewport.clientWidth / width) * FIT_MARGIN, (viewport.clientHeight / height) * FIT_MARGIN)
-    setZoom(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale)))
+    // No lower clamp here — a large diagram must be allowed to shrink as far as it takes to
+    // fit without cutting off. Only the upper bound is capped, so a 2-node diagram doesn't
+    // blow up to fill the whole viewport.
+    setZoom(Math.min(FIT_MAX_ZOOM, scale))
     setPan({ x: 0, y: 0 })
   }, [])
 
