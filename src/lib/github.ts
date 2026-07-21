@@ -86,22 +86,20 @@ export async function fetchPrInfo(pr: PrRef, pat?: string): Promise<PrInfo> {
   return { headSha, changedFiles, title, body }
 }
 
-export async function resolveDefaultBranch(
-  ref: Pick<RepoRef, 'owner' | 'repo'>,
-  pat?: string,
-): Promise<string> {
-  const res = await ghFetch(`${API}/repos/${ref.owner}/${ref.repo}`, pat)
-  const json = await res.json()
-  return json.default_branch as string
-}
-
+/**
+ * GitHub's commits endpoint accepts "HEAD" as a ref directly and resolves it
+ * to the default branch's tip commit server-side — no separate "look up the
+ * default branch name, then fetch its commit" round trip needed. That used
+ * to be two sequential API calls for the (very common) plain-repo-root case;
+ * this is the one call that matters on the critical path before anything can
+ * render, so cutting it in half here directly speeds up first paint.
+ */
 export async function resolveCommitSha(
   ref: RepoRef,
   pat?: string,
 ): Promise<string> {
-  const branch = ref.ref === 'HEAD' ? await resolveDefaultBranch(ref, pat) : ref.ref
   const res = await ghFetch(
-    `${API}/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(branch)}`,
+    `${API}/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(ref.ref)}`,
     pat,
   )
   const json = await res.json()

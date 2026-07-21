@@ -311,6 +311,12 @@ export function Sidebar() {
                       Resolving repository…
                     </div>
                   )}
+                  {status === 'indexing' && !graph && (
+                    <div className="cn-loading">
+                      <span className="cn-spinner" />
+                      Loading file tree…
+                    </div>
+                  )}
                   {status === 'error' && <div className="cn-error-block">{error}</div>}
                   {(status === 'indexing' || status === 'ready') && graph && (
                     <ErrorBoundary key={graph.repoKey + graph.commitSha} onReset={() => invalidateGraph(graph.repoKey, graph.commitSha)}>
