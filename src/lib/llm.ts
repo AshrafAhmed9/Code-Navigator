@@ -71,7 +71,13 @@ async function* streamOpenAI(apiKey: string, model: string, req: LlmRequest): As
     },
     body: JSON.stringify({
       model,
-      max_tokens: 500,
+      // GPT-5/o1/o3 reject `max_tokens` outright ("Unsupported parameter")
+      // and require `max_completion_tokens` instead; GPT-4/4o accept both,
+      // so this is the one name that works across the whole model lineup —
+      // not a tradeoff. `gpt-5` is this extension's own OpenAI default, so
+      // the old field name would have hard-failed every default-settings
+      // OpenAI user.
+      max_completion_tokens: 500,
       messages: [
         { role: 'system', content: req.system },
         { role: 'user', content: req.prompt },

@@ -69,6 +69,7 @@ export function resolveRelativeImport(
     `${base}/index.ts`,
     `${base}/index.tsx`,
     `${base}/index.js`,
+    `${base}/index.jsx`,
     `${base}.py`,
     `${base}.go`,
   ]
