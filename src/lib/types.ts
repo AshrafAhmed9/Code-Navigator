@@ -56,4 +56,5 @@ export interface Settings {
   llmModel?: string
   dockSide?: 'left' | 'right'
   codeFont?: 'sans' | 'mono'
+  onboardedAt?: number
 }
