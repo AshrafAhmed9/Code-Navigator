@@ -45,8 +45,16 @@ export type Language =
  * existed) crashes downstream code with "X is not iterable" deep inside a
  * useMemo, which React has no way to recover from short of unmounting the
  * whole sidebar. See src/lib/cache.ts.
+ *
+ * Also bump this on a pure correctness fix to how `imports`/`importedBy`
+ * are computed (not just a shape change) — e.g. v3 -> v4 was import
+ * resolution learning to handle Java/Python/Ruby's non-relative in-repo
+ * imports. The shape didn't change, but every previously cached graph's
+ * edges were silently wrong/incomplete, and a shape-only version check
+ * would have kept serving that stale (structurally valid but wrong) data
+ * forever.
  */
-export const REPO_GRAPH_SCHEMA_VERSION = 3
+export const REPO_GRAPH_SCHEMA_VERSION = 4
 
 export interface RepoGraph {
   schemaVersion: number

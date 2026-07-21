@@ -1,7 +1,7 @@
 import type { RepoRef, RepoTree, RepoGraph, FileNode } from './types'
 import { REPO_GRAPH_SCHEMA_VERSION } from './types'
 import { detectLanguage, isVendoredOrGenerated, isLikelyTestFile, CODE_EXTENSIONS } from './language'
-import { extractImportSpecifiers, resolveRelativeImport, extractExportedSymbols } from './importExtract'
+import { extractImportSpecifiers, resolveImportPath, buildImportIndex, extractExportedSymbols } from './importExtract'
 import { fetchManyFiles } from './github'
 
 /**
@@ -79,7 +79,7 @@ export async function buildImportGraph(
   // whose own content isn't being fetched this pass — otherwise a fetched
   // file that imports a skipped one would silently lose that edge instead of
   // just not knowing the skipped file's own imports.
-  const allPathSet = new Set(codePaths)
+  const importIndex = buildImportIndex(codePaths)
   // Each file is its own HTTP round-trip, so concurrency — not bandwidth — is
   // what dominates wall-clock time on large repos. A PAT'd request uses the
   // authenticated Contents API (5,000/hr budget), so it can run noticeably
@@ -102,7 +102,7 @@ export async function buildImportGraph(
     }
     const specifiers = extractImportSpecifiers(source, language)
     const imports = specifiers
-      .map((s) => resolveRelativeImport(path, s, allPathSet))
+      .map((s) => resolveImportPath(path, s, language, importIndex))
       .filter((p): p is string => p !== null)
     files[path] = {
       path,
