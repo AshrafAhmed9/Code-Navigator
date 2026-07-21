@@ -14,41 +14,63 @@ export function isTreeSitterSupported(lang: Language): boolean {
   return lang in LANGUAGE_MAP
 }
 
-let worker: Worker | null = null
+let workerPromise: Promise<Worker> | null = null
 let requestSeq = 0
 const pending = new Map<number, { resolve: (r: ParseResult) => void; reject: (e: Error) => void }>()
 
-function getWorker(): Worker {
-  if (worker) return worker
+/**
+ * Chrome blocks `new Worker(chrome-extension://...)` from a content script's
+ * origin with a SecurityError, even with web_accessible_resources declared —
+ * Worker construction applies a stricter same-origin check than fetch()/script
+ * tags do. The standard workaround: fetch the bundled worker script as text
+ * ourselves (which IS allowed, since that path is web-accessible to fetch),
+ * wrap it in a Blob, and construct the Worker from a blob: URL instead, which
+ * Chrome treats as same-origin to the page that created it.
+ */
+async function createWorker(): Promise<Worker> {
+  const workerScriptUrl = new URL('../content/parser.worker.ts', import.meta.url)
+  const res = await fetch(workerScriptUrl)
+  if (!res.ok) throw new Error(`failed to fetch worker script: ${res.status}`)
+  const code = await res.text()
+  const blobUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }))
+  return new Worker(blobUrl, { type: 'module' })
+}
 
-  worker = new Worker(new URL('../content/parser.worker.ts', import.meta.url), { type: 'module' })
-  worker.onmessage = (e: MessageEvent<ParseResult>) => {
-    const entry = pending.get(e.data.requestId)
-    if (!entry) return
-    pending.delete(e.data.requestId)
-    entry.resolve(e.data)
-  }
-  worker.onerror = (e: ErrorEvent) => {
-    // A worker-level (not per-parse) failure — e.g. the wasm bundle itself
-    // failed to load. Reject everything currently in flight so callers don't
-    // hang forever; future calls will spawn a fresh worker and try again.
-    console.warn('[Code Navigator] parser worker failed to load:', e.message || e)
-    for (const [, entry] of pending) entry.reject(new Error('parser worker crashed'))
-    pending.clear()
-    worker = null
-  }
+function getWorker(): Promise<Worker> {
+  if (workerPromise) return workerPromise
 
-  worker.postMessage({
-    type: 'init',
-    runtimeWasmUrl: chrome.runtime.getURL('wasm/web-tree-sitter.wasm'),
-    langWasmUrls: {
-      javascript: chrome.runtime.getURL('wasm/tree-sitter-javascript.wasm'),
-      typescript: chrome.runtime.getURL('wasm/tree-sitter-typescript.wasm'),
-      tsx: chrome.runtime.getURL('wasm/tree-sitter-tsx.wasm'),
-    },
+  workerPromise = createWorker().then((w) => {
+    w.onmessage = (e: MessageEvent<ParseResult>) => {
+      const entry = pending.get(e.data.requestId)
+      if (!entry) return
+      pending.delete(e.data.requestId)
+      entry.resolve(e.data)
+    }
+    w.onerror = (e: ErrorEvent) => {
+      // A worker-level (not per-parse) failure — e.g. the wasm bundle itself
+      // failed to load. Reject everything currently in flight so callers don't
+      // hang forever; future calls will spawn a fresh worker and try again.
+      console.warn('[Code Navigator] parser worker failed to load:', e.message || e)
+      for (const [, entry] of pending) entry.reject(new Error('parser worker crashed'))
+      pending.clear()
+      workerPromise = null
+    }
+    w.postMessage({
+      type: 'init',
+      runtimeWasmUrl: chrome.runtime.getURL('wasm/web-tree-sitter.wasm'),
+      langWasmUrls: {
+        javascript: chrome.runtime.getURL('wasm/tree-sitter-javascript.wasm'),
+        typescript: chrome.runtime.getURL('wasm/tree-sitter-typescript.wasm'),
+        tsx: chrome.runtime.getURL('wasm/tree-sitter-tsx.wasm'),
+      },
+    })
+    return w
+  })
+  workerPromise.catch(() => {
+    workerPromise = null // let a future call retry instead of being stuck on a rejected promise forever
   })
 
-  return worker
+  return workerPromise
 }
 
 const PARSE_TIMEOUT_MS = 8000
@@ -65,7 +87,7 @@ export async function parseFileSymbols(path: string, source: string, lang: Langu
   if (!supported) return null
 
   try {
-    const w = getWorker()
+    const w = await getWorker()
     const requestId = ++requestSeq
     const result = await new Promise<ParseResult>((resolve, reject) => {
       const timeout = setTimeout(() => {
