@@ -14,10 +14,15 @@ import { PrPanel, usePrRef } from './PrPanel'
 import { FileTree } from './FileTree'
 import { BookmarksPanel } from './BookmarksPanel'
 import { RateLimitFooter } from './RateLimitFooter'
+import { TourView } from './TourView'
 import { styles } from './styles'
 
 type Status = 'idle' | 'resolving' | 'indexing' | 'ready' | 'error'
-type View = { kind: 'repo-map' } | { kind: 'file'; path: string } | { kind: 'flow'; root: string }
+type View =
+  | { kind: 'repo-map' }
+  | { kind: 'file'; path: string }
+  | { kind: 'flow'; root: string }
+  | { kind: 'tour'; root: string; label?: string }
 type HomeTab = 'map' | 'tree' | 'bookmarks'
 
 export function Sidebar() {
@@ -309,7 +314,11 @@ export function Sidebar() {
                           ) : homeTab === 'bookmarks' ? (
                             <BookmarksPanel repoKey={graph.repoKey} />
                           ) : (
-                            <RepoMapView graph={graph} onOpenFlow={(root) => setView({ kind: 'flow', root })} />
+                            <RepoMapView
+                              graph={graph}
+                              onOpenFlow={(root) => setView({ kind: 'flow', root })}
+                              onOpenTour={(root, label) => setView({ kind: 'tour', root, label })}
+                            />
                           )}
                         </>
                       )}
@@ -338,6 +347,9 @@ export function Sidebar() {
       )}
       {view.kind === 'flow' && graph && (
         <FlowView graph={graph} root={view.root} onClose={() => setView({ kind: 'repo-map' })} />
+      )}
+      {view.kind === 'tour' && graph && (
+        <TourView graph={graph} root={view.root} label={view.label} onClose={() => setView({ kind: 'repo-map' })} />
       )}
     </>
   )
@@ -375,7 +387,15 @@ function PageBookmarkButton() {
   )
 }
 
-function RepoMapView({ graph, onOpenFlow }: { graph: RepoGraph; onOpenFlow: (root: string) => void }) {
+function RepoMapView({
+  graph,
+  onOpenFlow,
+  onOpenTour,
+}: {
+  graph: RepoGraph
+  onOpenFlow: (root: string) => void
+  onOpenTour: (root: string, label?: string) => void
+}) {
   const topFiles = mostDependedOn(graph, 5)
   const totalFiles = Object.keys(graph.files).length
   const systems = useMemo(() => detectCoreSystems(graph), [graph])
@@ -399,12 +419,23 @@ function RepoMapView({ graph, onOpenFlow }: { graph: RepoGraph; onOpenFlow: (roo
           <div className="cn-card">
             {systems.map((s) => (
               <div key={s.name} className="cn-system-row">
-                <div className="cn-system-name">{s.name}</div>
+                <div className="cn-system-header">
+                  <div className="cn-system-name">{s.name}</div>
+                  <span
+                    className={`cn-confidence cn-confidence-${s.confidenceLabel.toLowerCase()}`}
+                    title={s.reason}
+                  >
+                    {s.confidenceLabel} confidence
+                  </span>
+                </div>
                 {s.files.slice(0, 3).map((f) => (
                   <div key={f.path} className="cn-file-row cn-system-file">
                     {f.path}
                   </div>
                 ))}
+                <button className="cn-flow-btn cn-tour-trigger" onClick={() => onOpenTour(s.files[0].path, s.name)}>
+                  📚 Learn {s.name}
+                </button>
               </div>
             ))}
           </div>
@@ -417,9 +448,14 @@ function RepoMapView({ graph, onOpenFlow }: { graph: RepoGraph; onOpenFlow: (roo
           {graph.entryPoints.slice(0, 5).map((p) => (
             <div key={p} className="cn-file-row cn-entry-row">
               <span className="cn-file-path">{p}</span>
-              <button className="cn-flow-btn" title="Trace flow from here" onClick={() => onOpenFlow(p)}>
-                ⤳ flow
-              </button>
+              <span style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                <button className="cn-flow-btn" title="Take a guided reading tour from here" onClick={() => onOpenTour(p)}>
+                  📚 tour
+                </button>
+                <button className="cn-flow-btn" title="Trace flow from here" onClick={() => onOpenFlow(p)}>
+                  ⤳ flow
+                </button>
+              </span>
             </div>
           ))}
         </div>

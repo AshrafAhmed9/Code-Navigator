@@ -317,7 +317,12 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
 
 .cn-system-row { padding: 10px 0; border-bottom: 1px solid var(--cn-hairline-soft); }
 .cn-system-row:last-child { border-bottom: none; }
-.cn-system-name { font-weight: 600; font-size: 13px; color: var(--cn-text); margin-bottom: 4px; }
+.cn-system-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.cn-system-name { font-weight: 600; font-size: 13px; color: var(--cn-text); }
+.cn-confidence { font-size: 9.5px; font-weight: 650; padding: 2px 7px; border-radius: 8px; flex-shrink: 0; white-space: nowrap; cursor: help; }
+.cn-confidence-high { background: var(--cn-success-soft); color: var(--cn-success); }
+.cn-confidence-medium { background: var(--cn-warning-soft); color: var(--cn-warning); }
+.cn-confidence-low { background: rgba(255,255,255,0.06); color: var(--cn-muted); }
 .cn-system-file { padding-left: 10px; color: var(--cn-muted); border-bottom: none; padding-top: 2px; padding-bottom: 2px; font-size: 11.5px; }
 .cn-entry-row { }
 .cn-area-label { font-weight: 600; font-size: 12px; color: var(--cn-text); }
@@ -377,6 +382,24 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
 
 .cn-pr-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--cn-hairline-soft); }
 .cn-pr-row:last-child { border-bottom: none; }
+
+.cn-tour-trigger { margin-top: 8px; width: 100%; justify-content: center; display: flex; }
+.cn-tour-modal { width: 560px; max-height: 72vh; overflow-y: auto; }
+.cn-tour-steps { display: flex; flex-direction: column; gap: 4px; }
+.cn-tour-step {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: 10px;
+  background: var(--cn-card); border: 1px solid var(--cn-hairline-soft); transition: opacity 0.15s ease;
+}
+.cn-tour-step-done { opacity: 0.55; }
+.cn-tour-check {
+  flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; background: var(--cn-bg-deep); border: 1px solid var(--cn-hairline);
+  color: var(--cn-text); font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.15s ease;
+}
+.cn-tour-step-done .cn-tour-check { background: var(--cn-success-soft); border-color: transparent; color: var(--cn-success); }
+.cn-tour-step-body { flex: 1; min-width: 0; }
+.cn-tour-step-path { color: var(--cn-accent); text-decoration: none; font-size: 12.5px; font-weight: 600; word-break: break-all; }
+.cn-tour-step-path:hover { text-decoration: underline; }
 
 /* Pinned mode: full-height side panel instead of a floating centered card */
 .cn-root.cn-pinned { top: 0; transform: none; height: 100vh; align-items: stretch; }
