@@ -170,6 +170,15 @@ of files upfront, so the design leans on:
    regex-based) — cheap, works across languages without per-language
    grammars, less precise than AST-level analysis. Real AST parsing exists
    but is scoped to the single open file (see above).
+   Each supported language resolves imports the way it actually writes them,
+   not just JS/TS-style relative paths: Java's fully-qualified class names
+   and Python's dotted absolute imports are suffix-matched against the real
+   file tree (their source root, e.g. `src/main/java/`, is never the repo
+   root); Go resolves full module-path imports via the module root declared
+   in `go.mod`; Rust resolves `crate::`/`self::`/`super::` paths, including
+   the case where the last path segment is an imported item rather than a
+   file. External packages (npm, PyPI, Go/Rust stdlib, other modules) are
+   correctly left unresolved in every case, not guessed.
 2. **Everything cached by commit SHA** (`src/lib/cache.ts`) — reopening a
    repo/file is instant; a new commit invalidates cleanly. The cache is also
    schema-versioned (`REPO_GRAPH_SCHEMA_VERSION` in `src/lib/types.ts`): a
@@ -211,6 +220,11 @@ failure modes are guarded against directly rather than hoped around:
   accepts.** OpenAI's GPT-5/o1/o3 reject `max_tokens` outright and require
   `max_completion_tokens` instead (`src/lib/llm.ts` uses the latter, which
   is also accepted by GPT-4/4o).
+- **Mermaid node sizing matches what actually renders.** `mermaid.initialize()`
+  explicitly sets `fontFamily` to the same stack the shadow DOM renders
+  labels with — without this, mermaid sizes each node's box using its own
+  default font, and a genuine mismatch with the rendered font causes text to
+  overflow past the node border.
 
 ### Priorities: quality over speed, always
 Every claim (impact counts, "what breaks," search rankings) is **grounded in
@@ -341,6 +355,13 @@ TypeScript, React 19, Vite + `@crxjs/vite-plugin` (MV3 bundling), `idb`
   not the full repo — see [API budget](#api-budget). The file tree, search,
   bookmarks, and recent activity are unaffected; only the dependency graph
   and impact analysis are scoped to the indexed subset.
+- **Language-specific import resolution has known edge cases**: a Rust `mod`
+  block declared inline in code (rather than as its own file) has no
+  filesystem counterpart to resolve to; Go resolution needs a root `go.mod`
+  (a multi-module workspace or non-standard layout falls back to
+  unresolved); an ambiguous absolute import (ties between multiple
+  same-named files) intentionally resolves to nothing rather than guessing
+  wrong.
 
 ---
 
