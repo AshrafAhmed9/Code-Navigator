@@ -135,7 +135,11 @@ manifest.config.ts        MV3 manifest (CRXJS)
 vite.config.ts
 
 src/
-  background/index.ts     Service worker — opens Settings on first install
+  background/
+    index.ts               Service worker — opens Settings on first install,
+                            relays parse-symbols messages
+    symbols.ts               Tree-sitter parsing (runs here, not the content
+                              script — see Known Limitations for why)
 
   content/                Injected into github.com via a shadow-DOM root
     main.tsx              Mount point; detects repo pages, remounts on
@@ -211,20 +215,27 @@ TypeScript, React 19, Vite + `@crxjs/vite-plugin` (MV3 bundling with HMR),
 
 ## Known limitations (stated plainly, not glossed over)
 - **Real AST parsing exists but is scoped to one open file, JS/TS/TSX only.**
-  `src/lib/symbols.ts` + `src/content/parser.worker.ts` run actual tree-sitter
-  parsing (in a Web Worker, off the main thread) for whichever file you have
-  open, extracting real functions/classes/call-sites — shown in FilePanel as
-  "Functions & classes · AST-parsed". This is **not** yet a repo-wide,
-  cross-file call graph (which needs cross-file symbol resolution — imported
-  names resolved to their exporting file's definitions — a substantially
-  harder correctness problem than single-file parsing). File-level impact
-  analysis still runs on the regex import graph everywhere else. Other
-  languages have no AST support and fall back to regex only, silently and
-  without error.
-  ⚠️ *This was built and reasoned through carefully but has not been
-  runtime-verified in an actual Chrome browser — please test it (open a .ts
-  or .js file and check the "Functions & classes" section appears) and report
-  back if it doesn't work.*
+  `src/background/symbols.ts` runs actual tree-sitter parsing for whichever
+  file you have open, extracting real functions/classes/call-sites — shown in
+  FilePanel as "Functions & classes · AST-parsed". This is **not** yet a
+  repo-wide, cross-file call graph (which needs cross-file symbol resolution
+  — imported names resolved to their exporting file's definitions — a
+  substantially harder correctness problem than single-file parsing).
+  File-level impact analysis still runs on the regex import graph everywhere
+  else. Other languages have no AST support and fall back to regex only,
+  silently and without error.
+  - **Why parsing runs in the background service worker, not the content
+    script**: github.com's own page CSP blocks Worker creation outright
+    (`worker-src` allow-lists only GitHub's own asset domains) *and*
+    separately blocks WebAssembly compilation on the main thread
+    (`script-src` without `wasm-unsafe-eval`) — both confirmed via real
+    console errors during testing, not assumptions, and neither is
+    configurable from inside a page we don't control. The background service
+    worker is a different execution context entirely, governed only by this
+    extension's own CSP (relaxed in `manifest.config.ts` to permit
+    WebAssembly + eval, which `web-tree-sitter`'s compiled output needs) —
+    the content script sends the file's source over via
+    `chrome.runtime.sendMessage` and gets the parsed result back.
 - **Flow diagrams trace imports, not execution.** They show the *import*
   graph outward from a node, not an actual request/execution lifecycle
   (HTTP request → router → controller → service → DB). Real execution-flow
