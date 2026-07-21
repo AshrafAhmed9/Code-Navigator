@@ -131,12 +131,10 @@ export async function handleParseSymbols(req: ParseSymbolsRequest): Promise<Pars
     return { ok: true, path: req.path, definitions, callSites }
   } catch (err) {
     console.warn(`[Code Navigator] background tree-sitter parse failed for ${req.path}:`, err)
-    return {
-      ok: false,
-      path: req.path,
-      definitions: [],
-      callSites: [],
-      error: err instanceof Error ? err.message : String(err),
-    }
+    // Include the stack, not just .message, so the page console (which is
+    // what gets checked in practice) shows the real origin without needing
+    // to separately open the background service worker's own console.
+    const detail = err instanceof Error ? (err.stack ?? err.message) : String(err)
+    return { ok: false, path: req.path, definitions: [], callSites: [], error: detail }
   }
 }
