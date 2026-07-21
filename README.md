@@ -214,7 +214,8 @@ TypeScript, React 19, Vite + `@crxjs/vite-plugin` (MV3 bundling with HMR),
 ---
 
 ## Known limitations (stated plainly, not glossed over)
-- **Real AST parsing exists but is scoped to one open file, JS/TS/TSX only.**
+- **Real AST parsing** (confirmed working end-to-end in a real Chrome
+  install) **is scoped to one open file, JS/TS/TSX only.**
   `src/background/symbols.ts` runs actual tree-sitter parsing for whichever
   file you have open, extracting real functions/classes/call-sites — shown in
   FilePanel as "Functions & classes · AST-parsed". This is **not** yet a
@@ -225,16 +226,34 @@ TypeScript, React 19, Vite + `@crxjs/vite-plugin` (MV3 bundling with HMR),
   else. Other languages have no AST support and fall back to regex only,
   silently and without error.
   - **Why parsing runs in the background service worker, not the content
-    script**: github.com's own page CSP blocks Worker creation outright
-    (`worker-src` allow-lists only GitHub's own asset domains) *and*
-    separately blocks WebAssembly compilation on the main thread
-    (`script-src` without `wasm-unsafe-eval`) — both confirmed via real
-    console errors during testing, not assumptions, and neither is
-    configurable from inside a page we don't control. The background service
-    worker is a different execution context entirely, governed only by this
-    extension's own CSP (relaxed in `manifest.config.ts` to permit
-    WebAssembly + eval, which `web-tree-sitter`'s compiled output needs) —
-    the content script sends the file's source over via
+    script**: getting this working surfaced five independent platform walls,
+    each real and confirmed via actual browser errors, not assumptions —
+    documented here because the failure modes are non-obvious and this is
+    exactly the kind of thing that silently breaks again on a dependency bump:
+    1. github.com's page CSP blocks `Worker` creation outright (`worker-src`
+       allow-lists only GitHub's own asset domains) — including the blob-URL
+       workaround, which is also just a Worker under the hood.
+    2. Moving to the background service worker, its default CSP still
+       blocked WebAssembly compilation (`script-src` without
+       `wasm-unsafe-eval`) — relaxed in `manifest.config.ts` (this is *our*
+       extension's own CSP, which we can configure, unlike GitHub's page CSP).
+    3. Vite's dynamic-`import()` wrapper assumes a DOM exists (injects
+       `<link rel=modulepreload>` for browser performance) and threw
+       `document is not defined`, then `window is not defined`, inside a
+       service worker (no DOM at all) — worked around with a minimal shim in
+       `src/background/domShim.ts`.
+    4. Dynamic `import()` itself is banned inside a running
+       `ServiceWorkerGlobalScope` by the HTML spec
+       ([w3c/ServiceWorker#1356](https://github.com/w3c/ServiceWorker/issues/1356))
+       — fixed by switching to a static top-level `import` in
+       `src/background/symbols.ts`, which service workers do support.
+    5. `web-tree-sitter@0.26.x` changed its WASM linking format in a way
+       that's incompatible with grammar files built by `tree-sitter-cli@0.20.x`
+       (what the `tree-sitter-wasms` package — our source for the `.wasm`
+       grammar files — uses), throwing `need dylink section`
+       ([tree-sitter/tree-sitter#5171](https://github.com/tree-sitter/tree-sitter/issues/5171))
+       — fixed by pinning `web-tree-sitter` to `^0.25.10`.
+    The content script sends the file's source to the background via
     `chrome.runtime.sendMessage` and gets the parsed result back.
 - **Flow diagrams trace imports, not execution.** They show the *import*
   graph outward from a node, not an actual request/execution lifecycle
