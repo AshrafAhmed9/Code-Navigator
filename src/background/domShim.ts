@@ -25,3 +25,12 @@ if (typeof document === 'undefined') {
     head: { appendChild: () => {} },
   }
 }
+
+if (typeof window === 'undefined') {
+  // The preload helper's error path calls window.dispatchEvent(...) when a
+  // (stubbed, always-successful) preload "fails". `self` in a service worker
+  // is itself a real EventTarget (dispatchEvent genuinely works), so aliasing
+  // window to self — rather than a fake stub — keeps that call functionally
+  // correct instead of just silencing another crash.
+  ;(globalThis as unknown as { window: unknown }).window = self
+}
