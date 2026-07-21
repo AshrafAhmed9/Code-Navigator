@@ -3,6 +3,7 @@ import type { RepoGraph } from '../lib/types'
 import { computeImpact, relatedTests } from '../lib/graphBuilder'
 import { PurposePanel } from './PurposePanel'
 import { NarrativePanel } from './NarrativePanel'
+import { SymbolsPanel } from './SymbolsPanel'
 import { buildWhatBreaksPrompt, buildWhatToTestPrompt } from '../lib/prompts'
 
 /** Groups affected paths by their top directory so "27 files" reads as areas, not a number. */
@@ -37,6 +38,7 @@ export function FilePanel({ graph, path }: { graph: RepoGraph; path: string }) {
       </div>
 
       <PurposePanel graph={graph} path={path} />
+      <SymbolsPanel graph={graph} path={path} />
 
       <div className="cn-section">
         <div className="cn-label">

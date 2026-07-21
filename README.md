@@ -210,10 +210,21 @@ TypeScript, React 19, Vite + `@crxjs/vite-plugin` (MV3 bundling with HMR),
 ---
 
 ## Known limitations (stated plainly, not glossed over)
-- **No symbol-level call graph.** Import extraction is regex-based, not
-  AST-based (e.g. tree-sitter) — it knows file A imports file B, but not
-  *which function* calls *which function*. This is the single biggest gap
-  for precise impact analysis, and the real next leap for this project.
+- **Real AST parsing exists but is scoped to one open file, JS/TS/TSX only.**
+  `src/lib/symbols.ts` + `src/content/parser.worker.ts` run actual tree-sitter
+  parsing (in a Web Worker, off the main thread) for whichever file you have
+  open, extracting real functions/classes/call-sites — shown in FilePanel as
+  "Functions & classes · AST-parsed". This is **not** yet a repo-wide,
+  cross-file call graph (which needs cross-file symbol resolution — imported
+  names resolved to their exporting file's definitions — a substantially
+  harder correctness problem than single-file parsing). File-level impact
+  analysis still runs on the regex import graph everywhere else. Other
+  languages have no AST support and fall back to regex only, silently and
+  without error.
+  ⚠️ *This was built and reasoned through carefully but has not been
+  runtime-verified in an actual Chrome browser — please test it (open a .ts
+  or .js file and check the "Functions & classes" section appears) and report
+  back if it doesn't work.*
 - **Flow diagrams trace imports, not execution.** They show the *import*
   graph outward from a node, not an actual request/execution lifecycle
   (HTTP request → router → controller → service → DB). Real execution-flow

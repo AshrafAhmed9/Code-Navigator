@@ -33,4 +33,25 @@ export default defineManifest({
     'https://api.anthropic.com/*',
     'https://api.openai.com/*',
   ],
+  web_accessible_resources: [
+    {
+      // Fetched from inside a Web Worker (src/content/parser.worker.ts), which
+      // is not extension-privileged the way the content script's main thread
+      // is — the worker can't call chrome.runtime.getURL itself, and its
+      // fetch() of a chrome-extension:// URL needs this declaration.
+      resources: ['wasm/*.wasm'],
+      matches: ['https://github.com/*'],
+    },
+    {
+      // The worker's own bundled JS chunk (parser.worker-<hash>.js) must also
+      // be web-accessible for `new Worker(chrome-extension://.../...)` to be
+      // allowed to load it from the content script. CRXJS auto-detects and
+      // declares chunks reachable via dynamic import() (e.g. mermaid's), but
+      // not chunks only reachable via `new Worker(new URL(...))` — so this
+      // has to be declared explicitly, as a wildcard since the hash changes
+      // every build.
+      resources: ['assets/*.js'],
+      matches: ['https://github.com/*'],
+    },
+  ],
 })
