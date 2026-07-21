@@ -29,6 +29,24 @@ export function buildFilePurposePrompt(
   }
 }
 
+export function buildWhyIsThisHerePrompt(
+  graph: RepoGraph,
+  path: string,
+): LlmRequest {
+  const file = graph.files[path]
+  const consumers = file.importedBy
+  const evidence = [
+    `File: ${path}`,
+    `Exported symbols: ${file.exportedSymbols.slice(0, 20).join(', ') || 'none detected'}`,
+    `Primary consumers — files that import this one (${consumers.length}):\n${consumers.slice(0, 15).join('\n') || 'none detected'}`,
+  ].join('\n\n')
+
+  return {
+    system: GROUNDING_SYSTEM,
+    prompt: `Distinct from "what does this file do" -- explain WHY this file exists as a separate piece of the codebase: what problem its separation solves, and why its listed consumers need it specifically (not just what it does line-by-line). Base this only on the evidence below; if the consumer list is empty or thin, say the evidence doesn't support a confident answer rather than guessing a rationale.\n\n${evidence}`,
+  }
+}
+
 export function buildWhatBreaksPrompt(
   path: string,
   affected: string[],

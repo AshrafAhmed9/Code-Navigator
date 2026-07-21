@@ -4,7 +4,9 @@ import { computeImpact, relatedTests } from '../lib/graphBuilder'
 import { PurposePanel } from './PurposePanel'
 import { NarrativePanel } from './NarrativePanel'
 import { SymbolsPanel } from './SymbolsPanel'
-import { buildWhatBreaksPrompt, buildWhatToTestPrompt } from '../lib/prompts'
+import { CriticalityPanel } from './CriticalityPanel'
+import { SafeChangeChecklist, type ChecklistItem } from './SafeChangeChecklist'
+import { buildWhatBreaksPrompt, buildWhatToTestPrompt, buildWhyIsThisHerePrompt } from '../lib/prompts'
 
 /** Groups affected paths by their top directory so "27 files" reads as areas, not a number. */
 function groupByArea(paths: string[]): Array<{ area: string; paths: string[] }> {
@@ -26,6 +28,24 @@ export function FilePanel({ graph, path }: { graph: RepoGraph; path: string }) {
   const tests = useMemo(() => relatedTests(graph, path, impact.affected), [graph, path, impact.affected])
   const areas = useMemo(() => groupByArea(impact.affected), [impact.affected])
 
+  const checklistItems = useMemo((): ChecklistItem[] => {
+    const items: ChecklistItem[] = [{ id: 'read-file', label: `Read ${path.split('/').pop()}` }]
+    if (file?.importedBy.length) {
+      items.push({
+        id: 'check-consumers',
+        label: `Check ${file.importedBy.length} consumer${file.importedBy.length === 1 ? '' : 's'}`,
+        href: blobUrl(graph, file.importedBy[0]),
+      })
+    }
+    if (areas.length > 0) {
+      items.push({ id: 'review-impact', label: `Review impact across ${areas.length} area${areas.length === 1 ? '' : 's'}` })
+    }
+    if (tests.length > 0) {
+      items.push({ id: 'run-tests', label: `Run ${tests.length} related test${tests.length === 1 ? '' : 's'}`, href: blobUrl(graph, tests[0]) })
+    }
+    return items
+  }, [graph, path, file, areas, tests])
+
   if (!file) return null
 
   return (
@@ -37,8 +57,11 @@ export function FilePanel({ graph, path }: { graph: RepoGraph; path: string }) {
         {path}
       </div>
 
+      <SafeChangeChecklist items={checklistItems} risk={impact.risk} />
+
       <PurposePanel graph={graph} path={path} />
       <SymbolsPanel graph={graph} path={path} />
+      <CriticalityPanel graph={graph} path={path} />
 
       <div className="cn-section">
         <div className="cn-label">
@@ -105,6 +128,12 @@ export function FilePanel({ graph, path }: { graph: RepoGraph; path: string }) {
           </a>
         ))}
       </div>
+
+      <NarrativePanel
+        label="Why is this here?"
+        deps={[graph, path]}
+        buildRequest={() => buildWhyIsThisHerePrompt(graph, path)}
+      />
 
       <NarrativePanel
         label="What breaks if I change this?"

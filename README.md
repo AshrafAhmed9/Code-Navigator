@@ -45,6 +45,11 @@ in that graph. Nothing is ever proxied through a server this project runs.
   blow up to fill the whole screen.
 
 ### Make a safe change
+- **Safe Change Checklist** — the first thing you see on a file: an
+  actionable checklist ("Read X", "Check N consumers", "Review impact across
+  N areas", "Run N related tests") composed entirely from data already on the
+  page, not a new data source, with a risk-tier badge. Reframes "here are some
+  numbers" into "here's what to actually do before you edit this."
 - **Per-file impact analysis** — referenced-by, imports, and the full
   transitive impact set **grouped by affected area** (directory), not just a
   raw count, with a LOW/MEDIUM/HIGH risk tier. Every file listed links
@@ -52,10 +57,17 @@ in that graph. Nothing is ever proxied through a server this project runs.
 - **Related tests** — test files that import the changed file or anything in
   its impact set, found via the import graph (not guessed by naming
   convention alone).
+- **Criticality** — an opt-in, one-API-call rating combining graph fan-in
+  with commit count and contributor count for the open file (lazy: only
+  fetched if you click "Show criticality," never automatically, and cached —
+  see API-budget notes below).
 - **Grounded LLM narratives** (each visually labeled "LLM-inferred" so
   they're never confused with deterministic graph facts, and streamed live
   token-by-token):
   - **Purpose** — what a file is responsible for.
+  - **Why is this here?** — distinct from Purpose: the *reason* this file is
+    a separate piece of the codebase and why its listed consumers need it,
+    not a restatement of what it does.
   - **What breaks if I change this?** — grouped by affected area.
   - **What should I test?** — cites real test files from the graph, or says
     plainly when none were found rather than inventing test names.
@@ -96,6 +108,11 @@ in that graph. Nothing is ever proxied through a server this project runs.
   the Find X narrative works fully keyless on public repos. A GitHub token
   (no scopes needed) just raises the rate limit; an LLM key is separately
   optional.
+- **Live API budget footer** — shows remaining GitHub calls at all times;
+  turns visible/warning when low with a countdown to reset and an inline
+  "add a token" link. Indexing stops calling the authenticated Contents API
+  once exhausted instead of failing through every remaining file one by one
+  (`src/lib/rateLimit.ts`).
 
 ---
 

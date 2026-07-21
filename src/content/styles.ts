@@ -397,10 +397,14 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
   justify-content: center; background: var(--cn-bg-deep); border: 1px solid var(--cn-hairline);
   color: var(--cn-text); font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.15s ease;
 }
-.cn-tour-step-done .cn-tour-check { background: var(--cn-success-soft); border-color: transparent; color: var(--cn-success); }
+.cn-tour-step-done .cn-tour-check, .cn-tour-check.cn-tour-step-done { background: var(--cn-success-soft); border-color: transparent; color: var(--cn-success); }
 .cn-tour-step-body { flex: 1; min-width: 0; }
 .cn-tour-step-path { color: var(--cn-accent); text-decoration: none; font-size: 12.5px; font-weight: 600; word-break: break-all; }
 .cn-tour-step-path:hover { text-decoration: underline; }
+
+.cn-checklist-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; cursor: pointer; }
+.cn-checklist-label { font-size: 12.5px; color: var(--cn-text); }
+a.cn-checklist-label.cn-link { color: var(--cn-accent); }
 
 /* Pinned mode: full-height side panel instead of a floating centered card */
 .cn-root.cn-pinned { top: 0; transform: none; height: 100vh; align-items: stretch; }

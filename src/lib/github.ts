@@ -191,3 +191,57 @@ export async function fetchManyFiles(
   await Promise.all(Array.from({ length: Math.min(concurrency, paths.length) }, worker))
   return results
 }
+
+export interface FileCriticality {
+  commitCount: number
+  commitCountIsExact: boolean
+  contributors: number
+  contributorsIsExact: boolean
+}
+
+const criticalityCache = new Map<string, FileCriticality>()
+
+/**
+ * A single API call, only made when the user asks to see it (lazy) and cached
+ * per file@commit — this is deliberately NOT a repo-wide history crawl, which
+ * would burn the rate-limit budget fast on a large repo. One page of up to
+ * 100 commits gives commit count (exact if under 100, a documented lower
+ * bound otherwise via the Link header's last-page count) and a contributor
+ * count (a lower bound if there are more than 100 commits — labeled as such).
+ */
+export async function fetchFileCriticality(
+  ref: Pick<RepoRef, 'owner' | 'repo'>,
+  path: string,
+  commitSha: string,
+  pat?: string,
+): Promise<FileCriticality> {
+  const cacheKey = `${ref.owner}/${ref.repo}@${commitSha}:${path}`
+  const cached = criticalityCache.get(cacheKey)
+  if (cached) return cached
+
+  const res = await ghFetch(
+    `${API}/repos/${ref.owner}/${ref.repo}/commits?path=${encodeURIComponent(path)}&sha=${commitSha}&per_page=100`,
+    pat,
+  )
+  const commits = (await res.json()) as Array<{ author: { login: string } | null; commit: { author: { email: string } | null } }>
+
+  const authors = new Set(commits.map((c) => c.author?.login ?? c.commit.author?.email ?? 'unknown'))
+
+  let commitCount = commits.length
+  let commitCountIsExact = commits.length < 100
+  const link = res.headers.get('link')
+  const lastPageMatch = link?.match(/[?&]page=(\d+)>; rel="last"/)
+  if (lastPageMatch) {
+    commitCount = Number(lastPageMatch[1]) * 100 // approximate — last page itself may be partial
+    commitCountIsExact = false
+  }
+
+  const result: FileCriticality = {
+    commitCount,
+    commitCountIsExact,
+    contributors: authors.size,
+    contributorsIsExact: commits.length < 100,
+  }
+  criticalityCache.set(cacheKey, result)
+  return result
+}
