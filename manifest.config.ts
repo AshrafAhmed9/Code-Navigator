@@ -24,14 +24,17 @@ export default defineManifest({
   // WebAssembly.compile/instantiate requires regardless of where the bytes
   // came from — the background service worker (src/background/symbols.ts)
   // compiles tree-sitter's wasm grammars, so this has to be added explicitly.
-  // 'unsafe-eval' is also needed: 'wasm-unsafe-eval' only covers WebAssembly
-  // compilation, not the plain eval() calls that show up in web-tree-sitter's
-  // own compiled (Emscripten) output regardless of where it runs. This is
-  // *our own* extension's CSP, which we're allowed to relax for our own
-  // extension-privileged contexts — unlike github.com's page CSP, which we
-  // can't touch and which is the whole reason parsing had to move here.
+  // NOTE: 'unsafe-eval' was tried too (for a stray eval() call in
+  // web-tree-sitter's compiled Emscripten output) but Chrome hard-rejects it
+  // for MV3 extension_pages CSP at manifest-load time — "Insecure CSP value"
+  // — unlike 'wasm-unsafe-eval', it's not something an extension is allowed
+  // to grant itself at all, full stop. Betting that the actual eval() call
+  // sits behind a Node.js-only branch (typeof require !== 'undefined' or
+  // similar) that never executes in a browser — if wrong, the resulting
+  // error will be a distinct eval-specific CSP violation, not the vaguer
+  // wasm CompileError, so it'll be diagnosable either way.
   content_security_policy: {
-    extension_pages: "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; object-src 'self';",
+    extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
   },
   content_scripts: [
     {
