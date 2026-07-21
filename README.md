@@ -2,11 +2,13 @@
 
 A Chrome extension that overlays github.com and answers the architecture
 questions you actually have when dropped into an unfamiliar repo: *Where does
-this start? Who depends on this? What breaks if I change it?*
+this start? Who depends on this? What breaks if I change it? What should I
+test?*
 
 It builds a real import/dependency graph client-side (no backend, no hosting
 cost) and optionally uses your own LLM API key (Anthropic or OpenAI) to add
-natural-language explanations grounded in that graph.
+natural-language explanations grounded in that graph — never a freeform guess
+over the whole repo.
 
 > Best tried on a real, unfamiliar repo (e.g. `expressjs/express`), not a
 > small one — the value is orienting you in a codebase too large to read file
@@ -18,32 +20,48 @@ natural-language explanations grounded in that graph.
 - **Import-graph construction** — file-level dependency graph via the GitHub
   API, regex-based import extraction for TS/JS, Python, Go, Java, Ruby, Rust.
   Cached in IndexedDB keyed by commit SHA.
-- **Repo Map sidebar** — entry points, most depended-on files, language
-  breakdown. Shown on landing on any repo.
+- **"Understand this repository" first screen** — not a flat file list:
+  auto-detected **Core Systems** (Authentication, API, Database, Cache,
+  Message Queue, Payments, Background Jobs, Config, Storage), entry points,
+  most depended-on files, and language breakdown.
+- **⌘K command palette** — question-driven search ("Find Authentication",
+  "Find Database", or free text), heuristic-ranked by filename/symbol match
+  and import centrality, with an optional LLM narrative on top explaining
+  which result is the right starting point.
+- **Architecture flow diagrams** — traces the import graph outward from any
+  entry point or search result and renders it as a mermaid flowchart, bounded
+  so it stays readable. Mermaid is lazy-loaded (~2MB of unused diagram types
+  otherwise) so the always-shipped bundle stays ~40KB.
 - **Per-file impact analysis** — referenced-by, imports, transitive impact
-  count with a LOW/MEDIUM/HIGH risk tier, exported symbols. Every claim links
-  to the actual file on GitHub.
-- **BYOK LLM "Purpose" panel** — a grounded, streamed explanation of what a
-  file is responsible for, based strictly on its imports/importers/exports/
-  source excerpt (Anthropic or OpenAI, your own key, called directly from the
-  browser). Labeled "LLM-inferred" to stay visually distinct from graph facts.
-- **Zero-setup**: works fully keyless on public repos (60 req/hr); a GitHub
-  token (no scopes needed) raises that to 5,000/hr; an LLM key is separately
-  optional and only gates the Purpose panel.
+  grouped by **affected area** (not just a raw count) with a LOW/MEDIUM/HIGH
+  risk tier, related test files (graph-evidenced, not guessed), exported
+  symbols. Every claim links to the actual file on GitHub.
+- **Grounded LLM narratives**, each labeled "LLM-inferred" to stay visually
+  distinct from deterministic graph facts, streamed live:
+  - **Purpose** — what a file is responsible for.
+  - **What breaks if I change this?** — grouped by affected area.
+  - **What should I test?** — cites real test files from the graph, or says
+    plainly when none were found rather than inventing test names.
+- **PR review mode** — on any `github.com/.../pull/N` page, overlays impact
+  analysis (affected file count, risk tier, related test count) on every
+  changed file in the PR, using the PR's actual head commit.
+- **Zero-setup**: every feature above except the LLM narratives works fully
+  keyless on public repos (60 req/hr); a GitHub token (no scopes needed)
+  raises that to 5,000/hr; an LLM key is separately optional.
 
-### Not built yet
-This is still a data-dump MVP, not the full experience in the plan:
-- **Architecture flow diagrams** (mermaid) tracing an entry point through the
-  graph — the actual "wow in 30 seconds" visual, not a flat file list.
-- **"Find X" semantic search** (e.g. "Find Authentication"), LLM-ranked over
-  graph edges + name/content matching.
-- **"What breaks if I change this?" / "What should I test?"** LLM narratives
-  over the impact set (impact *counts* exist today; the narrative doesn't).
-- **PR review mode** — impact analysis overlaid on pull-request diffs.
-- **⌘K command palette.**
+### Known limitations / next real leap
 - Import extraction is regex-based, not AST-based (tree-sitter) — fast and
-  broad-language but less precise than a real parser; call-graph (not just
-  file-level import graph) isn't built.
+  broad-language, but less precise than a real parser, and there's no
+  symbol-level **call graph** (who calls this function, not just which file
+  imports which). This is the biggest gap for accurate impact analysis.
+- Flow diagrams trace the **import graph**, not actual **execution/request
+  lifecycle** (e.g. HTTP request → router → controller → service → DB). That
+  needs call-graph resolution across framework layers and is real future
+  scope, not a quick addition.
+- Core Systems detection is keyword-heuristic (path/filename matching), not
+  semantic — it can miss unconventionally-named code or mislabel it.
+- No local file-content full-text search yet — Find X matches path and
+  exported-symbol names, not arbitrary code content.
 
 ## Develop
 
@@ -61,8 +79,8 @@ mode → Load unpacked.
 Open the extension's options page to optionally add:
 - A **GitHub Personal Access Token** (no scopes needed for public repos) —
   raises the API rate limit from 60 to 5,000 requests/hour.
-- An **LLM API key** (Anthropic or OpenAI) — unlocks the Purpose panel's
-  natural-language explanations.
+- An **LLM API key** (Anthropic or OpenAI) — unlocks Purpose, What Breaks,
+  What Should I Test, and the Find X narrative.
 
-Both are optional. Core graph features (Repo Map, referenced-by, impact
-analysis) work with neither.
+Both are optional. Core graph features (Core Systems, Repo Map, referenced-by,
+impact analysis, flow diagrams, PR review) work with neither.

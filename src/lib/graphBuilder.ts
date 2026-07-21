@@ -1,5 +1,5 @@
 import type { RepoRef, RepoTree, RepoGraph, FileNode } from './types'
-import { detectLanguage, isVendoredOrGenerated, CODE_EXTENSIONS } from './language'
+import { detectLanguage, isVendoredOrGenerated, isLikelyTestFile, CODE_EXTENSIONS } from './language'
 import { extractImportSpecifiers, resolveRelativeImport, extractExportedSymbols } from './importExtract'
 import { fetchManyFiles } from './github'
 
@@ -105,4 +105,18 @@ export function computeImpact(graph: RepoGraph, path: string): { affected: strin
   const affected = Array.from(visited)
   const risk = affected.length > 15 ? 'HIGH' : affected.length > 5 ? 'MEDIUM' : 'LOW'
   return { affected, risk }
+}
+
+/**
+ * Test files that directly import the changed file or anything in its impact
+ * set — graph evidence for "what should I test?", not a guess.
+ */
+export function relatedTests(graph: RepoGraph, path: string, affected: string[]): string[] {
+  const relevant = new Set([path, ...affected])
+  const tests = new Set<string>()
+  for (const file of Object.values(graph.files)) {
+    if (!isLikelyTestFile(file.path)) continue
+    if (file.imports.some((imp) => relevant.has(imp))) tests.add(file.path)
+  }
+  return Array.from(tests)
 }

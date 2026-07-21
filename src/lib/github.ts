@@ -31,6 +31,44 @@ export function parseRepoUrl(url: string): RepoRef | null {
   return { owner: m[1], repo: m[2], ref: 'HEAD' }
 }
 
+export interface PrRef {
+  owner: string
+  repo: string
+  number: number
+}
+
+export function parsePullRequestUrl(url: string): PrRef | null {
+  const m = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/)
+  if (!m) return null
+  return { owner: m[1], repo: m[2], number: Number(m[3]) }
+}
+
+export interface PrInfo {
+  headSha: string
+  changedFiles: string[]
+}
+
+export async function fetchPrInfo(pr: PrRef, pat?: string): Promise<PrInfo> {
+  const prRes = await ghFetch(`${API}/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`, pat)
+  const prJson = await prRes.json()
+  const headSha = prJson.head.sha as string
+
+  const changedFiles: string[] = []
+  let page = 1
+  while (true) {
+    const res = await ghFetch(
+      `${API}/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/files?per_page=100&page=${page}`,
+      pat,
+    )
+    const files = (await res.json()) as Array<{ filename: string; status: string }>
+    changedFiles.push(...files.filter((f) => f.status !== 'removed').map((f) => f.filename))
+    if (files.length < 100) break
+    page++
+  }
+
+  return { headSha, changedFiles }
+}
+
 export async function resolveDefaultBranch(
   ref: Pick<RepoRef, 'owner' | 'repo'>,
   pat?: string,

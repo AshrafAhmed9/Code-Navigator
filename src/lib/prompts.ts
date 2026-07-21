@@ -28,3 +28,51 @@ export function buildFilePurposePrompt(
     prompt: `Explain what this file is responsible for in the codebase, based only on this evidence:\n\n${evidence}`,
   }
 }
+
+export function buildWhatBreaksPrompt(
+  path: string,
+  affected: string[],
+  risk: string,
+): LlmRequest {
+  const evidence = [
+    `Changed file: ${path}`,
+    `Risk tier (by fan-out size): ${risk}`,
+    `Files that transitively depend on it (${affected.length}):\n${affected.slice(0, 40).join('\n') || 'none'}`,
+  ].join('\n\n')
+
+  return {
+    system: GROUNDING_SYSTEM,
+    prompt: `A developer is about to modify ${path}. Based only on the dependent-file list below, explain what parts of the system are likely to break or need review, grouped by area if the file paths suggest natural groupings (e.g. by directory). Do not invent dependents not listed.\n\n${evidence}`,
+  }
+}
+
+export function buildWhatToTestPrompt(
+  path: string,
+  affected: string[],
+  tests: string[],
+): LlmRequest {
+  const evidence = [
+    `Changed file: ${path}`,
+    `Transitively affected files (${affected.length}):\n${affected.slice(0, 40).join('\n') || 'none'}`,
+    `Test files that import the changed file or an affected file (${tests.length}):\n${tests.join('\n') || 'none found by import graph'}`,
+  ].join('\n\n')
+
+  return {
+    system: GROUNDING_SYSTEM,
+    prompt: `Recommend what to test before merging a change to ${path}, based only on the evidence below. If no test files were found by the import graph, say so plainly and suggest which untested affected files most need coverage, rather than inventing test file names.\n\n${evidence}`,
+  }
+}
+
+export function buildFindPrompt(graph: RepoGraph, query: string, candidates: string[]): LlmRequest {
+  const evidence = candidates
+    .map((p) => {
+      const f = graph.files[p]
+      return `${p} — exports: ${f?.exportedSymbols.slice(0, 8).join(', ') || 'none detected'}`
+    })
+    .join('\n')
+
+  return {
+    system: `You rank and explain search results inside a code navigation tool. Only reference files in the provided candidate list -- never invent file paths. Be concise.`,
+    prompt: `A developer searched for "${query}" in this repository. Here are the top candidate files ranked by a heuristic (filename/symbol match + how many other files depend on them):\n\n${evidence}\n\nIn 2-3 sentences, say which of these files is most likely the right starting point and why, citing only paths from the list above.`,
+  }
+}
