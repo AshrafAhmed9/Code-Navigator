@@ -66,13 +66,19 @@ Your GitHub token and LLM key never leave your browser. See
 ### Navigate like an IDE
 - **File tree** (the default tab) — the full repo file/folder browser, live
   filter-as-you-type search, per-language color icons, VS-Code-style indent
-  guides, smooth expand/collapse. A home icon jumps back to the repo's front
-  page.
+  guides, smooth expand/collapse. **Collapsed by default** even on repos with
+  many root folders, so opening it is never a long scroll before you see
+  anything — a saved expansion state from a previous visit still takes
+  precedence. A home icon jumps back to the repo's front page.
 - **Bookmarks** — star any file, or bookmark the current page from the
   header on *any* GitHub page (file, issue, PR, repo root). Stored locally,
   grouped by repo.
-- Map / Tree / Bookmarks all render at the **same fixed panel size** —
-  switching tabs never resizes the sidebar.
+- **Tree, Bookmarks, and Recent are usable immediately** — they only need the
+  repo's file list, which is available the moment the tree loads, well
+  before the (potentially much slower) dependency-graph indexing finishes.
+  No need to wait through a blocking "Indexing…" screen just to browse files.
+- Map / Tree / Bookmarks / Recent all render at the **same fixed panel
+  size** — switching tabs never resizes the sidebar.
 
 ### Before you make a change
 - **Safe Change Checklist** — the first thing you see on a file: an
@@ -118,6 +124,12 @@ Your GitHub token and LLM key never leave your browser. See
   instead, becoming a permanent panel. Drag-resizable (340–880px).
 - **Dock left or right**, from the header icon or Settings.
 - **Monospace code font** option for file paths and code-ish text.
+- **Settings gear icon** in the header opens the options page directly, at
+  any time — not just via the first-run panel or a low-budget hint.
+- **First-run panel** explains the trust model (keys never leave your
+  browser) and prompts for a GitHub token *before* the unauthenticated
+  60/hr limit is likely to bite, not only after. Shown once; suppressed
+  automatically once a token or LLM key is configured.
 
 ---
 
@@ -133,6 +145,13 @@ Your GitHub token and LLM key never leave your browser. See
 - **Criticality is lazy and cached** (one call, on click) — deliberately not
   a repo-wide history crawl, which would burn the budget fast on a large
   repo.
+- **Very large repos are bounded, not throttled to a crawl.** Past 1,500 code
+  files, indexing prioritizes a subset (entry-point-shaped files, then
+  shallower paths first) instead of trying to fetch every file — no realistic
+  concurrency finishes tens of thousands of individual file requests in
+  reasonable time, and pushing concurrency higher risks tripping GitHub's
+  secondary abuse-detection limit regardless of the primary budget. The Map
+  view says plainly when this happened and how many files were covered.
 
 ---
 
@@ -149,10 +168,36 @@ browser tab can't parse thousands of files upfront, so the design leans on:
    grammars, less precise than AST-level analysis. Real AST parsing exists
    but is scoped to the single open file (see above).
 2. **Everything cached by commit SHA** (`src/lib/cache.ts`) — reopening a
-   repo/file is instant; a new commit invalidates cleanly.
+   repo/file is instant; a new commit invalidates cleanly. The cache is also
+   schema-versioned (`REPO_GRAPH_SCHEMA_VERSION` in `src/lib/types.ts`): a
+   graph cached under an older shape is discarded and rebuilt rather than
+   handed to current code as-is, which used to be able to crash on a missing
+   field.
 3. **Bounded, batched fetching** (`src/lib/github.ts`) — concurrency-pooled
-   (8 in flight), Contents API or raw.githubusercontent.com depending on
-   whether a token is set.
+   (24 in flight with a token, 12 without — each path has its own separate
+   rate-limit budget), Contents API or raw.githubusercontent.com depending on
+   whether a token is set, capped at 1,500 indexed files on very large repos
+   (see [API budget](#api-budget)).
+
+### Reliability
+The sidebar is expected to show up on every repo, every time — a few specific
+failure modes are guarded against directly rather than hoped around:
+- **Self-healing mount.** `src/content/main.tsx` doesn't just mount once on
+  page load — it watches for the sidebar's host node ever disappearing (not
+  only on navigation) and remounts it, with the entire mount/sync path
+  wrapped so one unexpected error can't silently take the whole sidebar down
+  for the rest of the page's life. A toolbar-icon click force-remounts it
+  manually as a last resort.
+- **An error boundary** (`src/content/ErrorBoundary.tsx`) around the
+  graph-dependent views means a future rendering bug shows a "Retry" message
+  scoped to that view instead of an uncaught error unmounting React's entire
+  tree — which used to take the toggle button down with it, since it lives
+  under the same root.
+- **Progressive indexing.** The file list is available (and Tree/Bookmarks/
+  Recent usable) the moment the repo tree is fetched — well before the
+  slower per-file content indexing that builds the dependency graph
+  finishes. The whole panel no longer blocks on the slowest step just to
+  show the tabs that don't need it.
 
 ### Priorities: quality over speed, always
 Every claim (impact counts, "what breaks," search rankings) is **grounded in
@@ -173,10 +218,12 @@ src/
     domShim.ts               Minimal document/window shim (see docs/tree-sitter.md)
 
   content/                Injected into github.com via a shadow-DOM root
-    main.tsx              Mount point; detects repo pages, remounts on
-                           GitHub's Turbo SPA navigation (turbo:load-based)
+    main.tsx              Mount point; self-healing remount on GitHub's Turbo
+                           SPA navigation (turbo:load-based) and DOM churn
     Sidebar.tsx            Top-level UI state machine: repo indexing, tabs
-                           (Map/Tree/Bookmarks), pin/dock/theme, view routing
+                           (Map/Tree/Bookmarks/Recent), pin/dock/theme, routing
+    ErrorBoundary.tsx       Contains a rendering crash to a "Retry" message
+    OnboardingPanel.tsx      First-run trust/token panel
     FilePanel.tsx          Per-file: checklist, referenced-by, impact, tests
     PurposePanel.tsx        "Purpose" LLM narrative (fetches file source)
     NarrativePanel.tsx      Generic streaming LLM panel
@@ -184,34 +231,42 @@ src/
     SafeChangeChecklist.tsx  Actionable checklist composed from existing data
     CriticalityPanel.tsx      Lazy commit/contributor rating
     TourView.tsx               Guided Tours modal
-    FileTree.tsx                 IDE-style folder/file browser
+    FileTree.tsx                 IDE-style folder/file browser (collapsed by default)
     BookmarksPanel.tsx            Saved bookmarks list
+    HistoryPanel.tsx                Recent-activity list
     CommandPalette.tsx             ⌘K search UI
     FlowView.tsx                    Mermaid architecture-flow modal (pan/zoom)
-    PrPanel.tsx                      PR review mode
+    PrPanel.tsx                      PR review mode + "Explain this PR"
     RateLimitFooter.tsx               Live GitHub API budget display
     styles.ts                          All CSS as a template string (shadow root)
 
   lib/                    No React — pure logic, all independently testable
-    types.ts               Shared types (RepoGraph, FileNode, Settings, ...)
+    types.ts               Shared types (RepoGraph, FileNode, Settings, ...);
+                            REPO_GRAPH_SCHEMA_VERSION for cache invalidation
     github.ts               GitHub REST API client (tree, blobs, PR files, criticality)
     githubTheme.ts           Reads/watches GitHub's light/dark theme
     rateLimit.ts              Tracks X-RateLimit-* headers, exposes budget state
-    cache.ts                   IndexedDB graph cache, keyed by commit SHA
+    cache.ts                   IndexedDB graph cache, keyed by commit SHA + schema version
     settings.ts                 chrome.storage.local wrapper for Settings
+    openOptions.ts                Opens the options page via the background worker
+                                   (chrome.runtime.openOptionsPage only works there,
+                                   not from a content script)
     language.ts                  Extension → language map, test-file heuristic
     importExtract.ts              Regex import/export extraction per language
     graphBuilder.ts                 Import graph; impact analysis; related-tests;
-                                     entry-point detection
+                                     entry-point detection; skeleton graph for
+                                     progressive indexing; large-repo indexing cap
     systems.ts                       Keyword-based Core Systems detection + confidence
     tour.ts                           Guided Tours ordering (reuses flow.ts's BFS)
     find.ts                            Find X heuristic ranking
     flow.ts                             BFS trace + mermaid diagram generation
     tree.ts                             Flat paths → nested folder/file tree
     bookmarks.ts                         Bookmark storage + URL classification
+    history.ts                            Recent-activity storage (same pattern)
     symbols.ts                            Content-script relay to background parsing
     llm.ts                                 Provider-agnostic streaming LLM client
-    prompts.ts                              All grounded LLM prompt templates
+    prompts.ts                              All grounded LLM prompt templates,
+                                             including "Explain this PR"
 
 src/options/               Settings page (PAT, LLM key, dock side, font)
 ```
@@ -269,6 +324,10 @@ TypeScript, React 19, Vite + `@crxjs/vite-plugin` (MV3 bundling), `idb`
 - **Not supported**: GitHub Enterprise (hardcoded to `api.github.com`),
   multiple simultaneous accounts, no paid tier — everything here is free by
   design.
+- **Very large repos (1,500+ code files) get a prioritized subset indexed**,
+  not the full repo — see [API budget](#api-budget). The file tree, search,
+  bookmarks, and recent activity are unaffected; only the dependency graph
+  and impact analysis are scoped to the indexed subset.
 
 ---
 
