@@ -45,6 +45,19 @@ over the whole repo.
 - **PR review mode** — on any `github.com/.../pull/N` page, overlays impact
   analysis (affected file count, risk tier, related test count) on every
   changed file in the PR, using the PR's actual head commit.
+- **IDE-like file tree** — full collapsible folder/file browser for the repo
+  (not just indexed code files), with a live filter-as-you-type search that
+  auto-expands matching branches, and per-language color icons.
+- **Bookmarks** — star any file from the tree, or bookmark the current page
+  from the header (works on file, issue, PR, and repo-root pages), for quick
+  return access. Stored locally, scoped per-repo with an "other repos" section.
+- **Follows GitHub's own theme** — detects and live-updates with GitHub's
+  light/dark/auto theme setting (`data-color-mode`), instead of a fixed theme.
+- **Pin sidebar** — toggle between floating over the page (default) and
+  pinned, which pushes GitHub's own content over to reserve room, like a
+  permanent side panel.
+- **Dock left or right**, and a **monospace code font** option for file paths
+  — both togglable from the sidebar header or the options page.
 - **Zero-setup**: every feature above except the LLM narratives works fully
   keyless on public repos (60 req/hr); a GitHub token (no scopes needed)
   raises that to 5,000/hr; an LLM key is separately optional.
@@ -62,6 +75,12 @@ over the whole repo.
   semantic — it can miss unconventionally-named code or mislabel it.
 - No local file-content full-text search yet — Find X matches path and
   exported-symbol names, not arbitrary code content.
+- **Private repos**: work if your PAT has the `repo` scope — the GitHub API
+  client already authenticates with it — but there's no OAuth sign-in flow,
+  so you manage the token yourself via Settings.
+- **Not supported**: GitHub Enterprise (hardcoded to `api.github.com`, no
+  configurable base URL), multiple simultaneous accounts, and there's no
+  paid tier — everything here is free and client-side by design.
 
 ## Develop
 

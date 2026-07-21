@@ -15,9 +15,9 @@ export async function buildImportGraph(
   pat: string | undefined,
   onProgress?: (done: number, total: number) => void,
 ): Promise<RepoGraph> {
-  const codePaths = tree.entries
-    .filter((e) => e.type === 'blob')
-    .map((e) => e.path)
+  const allPaths = tree.entries.filter((e) => e.type === 'blob').map((e) => e.path)
+
+  const codePaths = allPaths
     .filter((p) => !isVendoredOrGenerated(p))
     .filter((p) => CODE_EXTENSIONS.has(p.split('.').pop()?.toLowerCase() ?? ''))
 
@@ -65,6 +65,7 @@ export async function buildImportGraph(
     files,
     entryPoints,
     languageBreakdown,
+    allPaths,
   }
 }
 

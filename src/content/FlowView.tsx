@@ -74,7 +74,8 @@ export function FlowView({ graph, root, onClose }: { graph: RepoGraph; root: str
           const width = viewBox?.[2] || svgEl.getBoundingClientRect().width || 800
           const height = viewBox?.[3] || svgEl.getBoundingClientRect().height || 400
           naturalSize.current = { width, height }
-          fitToViewport()
+          setZoom(0.5)
+          setPan({ x: 0, y: 0 })
         }
       })
       .catch((e) => {
@@ -83,7 +84,7 @@ export function FlowView({ graph, root, onClose }: { graph: RepoGraph; root: str
     return () => {
       cancelled = true
     }
-  }, [graph, root, fitToViewport])
+  }, [graph, root])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {

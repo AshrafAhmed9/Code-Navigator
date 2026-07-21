@@ -80,6 +80,32 @@ export function Options() {
         />
       </section>
 
+      <section style={{ marginTop: 20 }}>
+        <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Sidebar dock position</label>
+        <select
+          value={settings.dockSide ?? 'right'}
+          onChange={(e) => setSettings((s) => ({ ...s, dockSide: e.target.value as Settings['dockSide'] }))}
+          style={{ width: '100%', padding: 8, boxSizing: 'border-box' }}
+        >
+          <option value="right">Right edge</option>
+          <option value="left">Left edge</option>
+        </select>
+        <p style={{ color: '#888', fontSize: 12 }}>Also toggleable from the sidebar's own header icon.</p>
+      </section>
+
+      <section style={{ marginTop: 20 }}>
+        <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Code font</label>
+        <select
+          value={settings.codeFont ?? 'sans'}
+          onChange={(e) => setSettings((s) => ({ ...s, codeFont: e.target.value as Settings['codeFont'] }))}
+          style={{ width: '100%', padding: 8, boxSizing: 'border-box' }}
+        >
+          <option value="sans">System font</option>
+          <option value="mono">Monospace</option>
+        </select>
+        <p style={{ color: '#888', fontSize: 12 }}>Used for file paths and code-ish text throughout the sidebar.</p>
+      </section>
+
       <button
         onClick={handleSave}
         style={{

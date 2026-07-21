@@ -2,17 +2,22 @@ import { useEffect, useMemo, useState } from 'react'
 import { parseRepoUrl, resolveCommitSha, fetchRepoTree } from '../lib/github'
 import { buildImportGraph, mostDependedOn } from '../lib/graphBuilder'
 import { getGraph, setGraph, graphKey } from '../lib/cache'
-import { getSettings } from '../lib/settings'
+import { getSettings, saveSettings } from '../lib/settings'
 import { detectCoreSystems } from '../lib/systems'
+import { detectGitHubTheme, watchGitHubTheme, type Theme } from '../lib/githubTheme'
+import { classifyUrl, isBookmarked, toggleBookmark, type Bookmark } from '../lib/bookmarks'
 import type { RepoGraph } from '../lib/types'
 import { FilePanel } from './FilePanel'
 import { FlowView } from './FlowView'
 import { CommandPalette } from './CommandPalette'
 import { PrPanel, usePrRef } from './PrPanel'
+import { FileTree } from './FileTree'
+import { BookmarksPanel } from './BookmarksPanel'
 import { styles } from './styles'
 
 type Status = 'idle' | 'resolving' | 'indexing' | 'ready' | 'error'
 type View = { kind: 'repo-map' } | { kind: 'file'; path: string } | { kind: 'flow'; root: string }
+type HomeTab = 'map' | 'tree' | 'bookmarks'
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('cn-collapsed') === '1')
@@ -23,6 +28,11 @@ export function Sidebar() {
   const [hasPat, setHasPat] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [view, setView] = useState<View>({ kind: 'repo-map' })
+  const [homeTab, setHomeTab] = useState<HomeTab>('map')
+  const [dockSide, setDockSide] = useState<'left' | 'right'>('right')
+  const [codeFont, setCodeFont] = useState<'sans' | 'mono'>('sans')
+  const [theme, setTheme] = useState<Theme>(() => detectGitHubTheme())
+  const [pinned, setPinned] = useState(() => localStorage.getItem('cn-pinned') === '1')
 
   const prRef = usePrRef()
   const ref = useMemo(() => parseRepoUrl(window.location.href), [])
@@ -31,6 +41,15 @@ export function Sidebar() {
   useEffect(() => {
     if (initialFilePath) setView({ kind: 'file', path: initialFilePath })
   }, [initialFilePath])
+
+  useEffect(() => {
+    getSettings().then((s) => {
+      if (s.dockSide) setDockSide(s.dockSide)
+      if (s.codeFont) setCodeFont(s.codeFont)
+    })
+  }, [])
+
+  useEffect(() => watchGitHubTheme(setTheme), [])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -92,6 +111,40 @@ export function Sidebar() {
     })
   }
 
+  function toggleDock() {
+    setDockSide((d) => {
+      const next = d === 'left' ? 'right' : 'left'
+      saveSettings({ dockSide: next })
+      return next
+    })
+  }
+
+  function togglePinned() {
+    setPinned((p) => {
+      const next = !p
+      localStorage.setItem('cn-pinned', next ? '1' : '0')
+      return next
+    })
+  }
+
+  // Pinned mode pushes GitHub's own page content over to reserve room for the
+  // sidebar (like Octotree's pin), instead of floating on top of it.
+  useEffect(() => {
+    const html = document.documentElement
+    const marginProp = dockSide === 'left' ? 'marginLeft' : 'marginRight'
+    if (pinned && !collapsed) {
+      html.style[marginProp] = '372px'
+      html.style.transition = 'margin 0.2s ease'
+    } else {
+      html.style.marginLeft = ''
+      html.style.marginRight = ''
+    }
+    return () => {
+      html.style.marginLeft = ''
+      html.style.marginRight = ''
+    }
+  }, [pinned, collapsed, dockSide])
+
   if (!ref) return null
 
   const showBack = !prRef && view.kind !== 'repo-map'
@@ -100,7 +153,12 @@ export function Sidebar() {
   return (
     <>
       <style>{styles}</style>
-      <div className={`cn-root ${collapsed ? 'cn-collapsed' : ''}`}>
+      <div
+        className={`cn-root ${collapsed ? 'cn-collapsed' : ''} ${dockSide === 'left' ? 'cn-dock-left' : ''} ${
+          codeFont === 'mono' ? 'cn-font-mono' : ''
+        }`}
+        data-theme={theme}
+      >
         <button className="cn-toggle" onClick={toggle} title="Code Navigator (⌘K to search)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="7" />
@@ -123,12 +181,45 @@ export function Sidebar() {
                   Code Navigator
                 </div>
               )}
-              <button className="cn-collapse-btn" onClick={toggle} title="Collapse">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
+              <div className="cn-header-actions">
+                <PageBookmarkButton />
+                <button
+                  className={`cn-collapse-btn ${pinned ? 'cn-pin-active' : ''}`}
+                  onClick={togglePinned}
+                  title={pinned ? 'Unpin (float over page)' : 'Pin sidebar (push page content over)'}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill={pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="9" r="4" />
+                    <path d="M12 13v8" strokeLinecap="round" />
+                  </svg>
+                </button>
+                <button className="cn-collapse-btn" onClick={toggleDock} title="Switch side">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M7 4v16M17 4v16" strokeLinecap="round" />
+                    <path d={dockSide === 'left' ? 'M14 9l3 3-3 3' : 'M10 9l-3 3 3 3'} strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <button className="cn-collapse-btn" onClick={toggle} title="Collapse">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
             </div>
+
+            {!prRef && status === 'ready' && graph && view.kind !== 'file' && (
+              <div className="cn-tabs">
+                <button className={`cn-tab ${homeTab === 'map' ? 'cn-tab-active' : ''}`} onClick={() => setHomeTab('map')}>
+                  Map
+                </button>
+                <button className={`cn-tab ${homeTab === 'tree' ? 'cn-tab-active' : ''}`} onClick={() => setHomeTab('tree')}>
+                  Tree
+                </button>
+                <button className={`cn-tab ${homeTab === 'bookmarks' ? 'cn-tab-active' : ''}`} onClick={() => setHomeTab('bookmarks')}>
+                  Bookmarks
+                </button>
+              </div>
+            )}
 
             <div className="cn-body">
               {prRef ? (
@@ -160,18 +251,26 @@ export function Sidebar() {
                   {status === 'error' && <div className="cn-error-block">{error}</div>}
                   {status === 'ready' && graph && (
                     <>
-                      <button className="cn-search-trigger" onClick={() => setPaletteOpen(true)}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <circle cx="11" cy="11" r="7" />
-                          <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-                        </svg>
-                        <span>Find anything…</span>
-                        <span className="cn-kbd">⌘K</span>
-                      </button>
                       {view.kind === 'file' && graph.files[view.path] ? (
                         <FilePanel graph={graph} path={view.path} />
                       ) : (
-                        <RepoMapView graph={graph} onOpenFlow={(root) => setView({ kind: 'flow', root })} />
+                        <>
+                          <button className="cn-search-trigger" onClick={() => setPaletteOpen(true)}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="11" cy="11" r="7" />
+                              <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+                            </svg>
+                            <span>Find anything…</span>
+                            <span className="cn-kbd">⌘K</span>
+                          </button>
+                          {homeTab === 'tree' ? (
+                            <FileTree graph={graph} />
+                          ) : homeTab === 'bookmarks' ? (
+                            <BookmarksPanel repoKey={graph.repoKey} />
+                          ) : (
+                            <RepoMapView graph={graph} onOpenFlow={(root) => setView({ kind: 'flow', root })} />
+                          )}
+                        </>
                       )}
                     </>
                   )}
@@ -199,6 +298,38 @@ export function Sidebar() {
         <FlowView graph={graph} root={view.root} onClose={() => setView({ kind: 'repo-map' })} />
       )}
     </>
+  )
+}
+
+function PageBookmarkButton() {
+  const url = window.location.href.split('#')[0]
+  const classified = useMemo(() => classifyUrl(url), [url])
+  const [marked, setMarked] = useState(false)
+
+  useEffect(() => {
+    isBookmarked(url).then(setMarked)
+  }, [url])
+
+  if (!classified) return null
+
+  async function onClick() {
+    const bookmark: Bookmark = {
+      url,
+      title: document.title.replace(/\s*·\s*GitHub.*$/, ''),
+      repoKey: classified!.repoKey,
+      kind: classified!.kind,
+      addedAt: Date.now(),
+    }
+    const next = await toggleBookmark(bookmark)
+    setMarked(next)
+  }
+
+  return (
+    <button className={`cn-collapse-btn ${marked ? 'cn-bookmark-active' : ''}`} onClick={onClick} title="Bookmark this page">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill={marked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8">
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z" strokeLinejoin="round" />
+      </svg>
+    </button>
   )
 }
 

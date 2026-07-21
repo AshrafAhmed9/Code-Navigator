@@ -45,6 +45,8 @@ export interface RepoGraph {
   files: Record<string, FileNode>
   entryPoints: string[]
   languageBreakdown: Record<string, number>
+  /** Every blob path in the repo tree, not just indexed code files — powers the file tree browser. */
+  allPaths: string[]
 }
 
 export interface Settings {
@@ -52,4 +54,6 @@ export interface Settings {
   llmProvider?: 'anthropic' | 'openai'
   llmApiKey?: string
   llmModel?: string
+  dockSide?: 'left' | 'right'
+  codeFont?: 'sans' | 'mono'
 }
