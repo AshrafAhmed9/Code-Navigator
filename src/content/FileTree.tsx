@@ -31,7 +31,7 @@ export function FileTree({ graph }: { graph: RepoGraph }) {
     // scroll past just to see the folder list. A saved expansion state (from
     // manually opening folders on a previous visit) still takes precedence.
     try {
-      const saved = localStorage.getItem(`cn-tree-expanded:${graph.repoKey}`)
+      const saved = localStorage.getItem(`cn-tree-expanded-v2:${graph.repoKey}`)
       return saved ? new Set(JSON.parse(saved)) : new Set<string>()
     } catch {
       return new Set<string>()
@@ -39,7 +39,7 @@ export function FileTree({ graph }: { graph: RepoGraph }) {
   })
 
   useEffect(() => {
-    localStorage.setItem(`cn-tree-expanded:${graph.repoKey}`, JSON.stringify(Array.from(expanded)))
+    localStorage.setItem(`cn-tree-expanded-v2:${graph.repoKey}`, JSON.stringify(Array.from(expanded)))
   }, [expanded, graph.repoKey])
 
   const matchSet = useMemo(() => {
