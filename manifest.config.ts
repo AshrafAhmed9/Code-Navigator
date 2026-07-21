@@ -13,7 +13,7 @@ export default defineManifest({
     128: 'public/icon128.png',
   },
   action: {
-    default_title: 'Code Navigator',
+    default_title: 'Code Navigator — click to open/reopen the sidebar',
   },
   options_page: 'src/options/index.html',
   background: {
