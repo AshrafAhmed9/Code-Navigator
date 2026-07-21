@@ -1,3 +1,4 @@
+import './domShim' // must run before any dynamic import() (see file comment)
 import { handleParseSymbols, type ParseSymbolsRequest } from './symbols'
 
 chrome.runtime.onInstalled.addListener((details) => {
