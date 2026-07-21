@@ -2,7 +2,7 @@ import type { RepoRef, RepoTree, RepoGraph, FileNode } from './types'
 import { REPO_GRAPH_SCHEMA_VERSION } from './types'
 import { detectLanguage, isVendoredOrGenerated, isLikelyTestFile, CODE_EXTENSIONS } from './language'
 import { extractImportSpecifiers, resolveImportPath, buildImportIndex, extractExportedSymbols } from './importExtract'
-import { fetchManyFiles } from './github'
+import { fetchManyFiles, fetchFileContent } from './github'
 
 /**
  * A graph with the full file tree (allPaths) but no import/content data yet —
@@ -75,11 +75,27 @@ export async function buildImportGraph(
     : codePaths
   const fetchSet = new Set(pathsToFetch)
 
+  // Go imports are full module paths (e.g. "github.com/owner/repo/internal/foo"),
+  // resolvable only by knowing the module's own declared root — fetch the
+  // root go.mod once (cheap, cached like any other file) so Go's import
+  // graph isn't silently empty. Absent/unparseable go.mod (multi-module
+  // repo, non-standard layout) just leaves Go imports unresolved, same as
+  // before this existed.
+  let goModulePath: string | null = null
+  if (codePaths.some((p) => p.endsWith('.go'))) {
+    try {
+      const goMod = await fetchFileContent(ref, commitSha, 'go.mod', pat)
+      goModulePath = goMod.match(/^\s*module\s+(\S+)/m)?.[1] ?? null
+    } catch {
+      // no root go.mod, or fetch failed — leave Go imports unresolved
+    }
+  }
+
   // Every code path counts as a valid import-resolution target, even the ones
   // whose own content isn't being fetched this pass — otherwise a fetched
   // file that imports a skipped one would silently lose that edge instead of
   // just not knowing the skipped file's own imports.
-  const importIndex = buildImportIndex(codePaths)
+  const importIndex = buildImportIndex(codePaths, goModulePath)
   // Each file is its own HTTP round-trip, so concurrency — not bandwidth — is
   // what dominates wall-clock time on large repos. A PAT'd request uses the
   // authenticated Contents API (5,000/hr budget), so it can run noticeably

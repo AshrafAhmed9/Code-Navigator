@@ -57,9 +57,11 @@ export function extractImportSpecifiers(source: string, lang: Language): string[
 export interface ImportIndex {
   allPaths: Set<string>
   byFilename: Map<string, string[]>
+  /** Present only when a root go.mod was found — see resolveGoImport. */
+  go?: { modulePath: string; byDir: Map<string, string[]> }
 }
 
-export function buildImportIndex(paths: string[]): ImportIndex {
+export function buildImportIndex(paths: string[], goModulePath?: string | null): ImportIndex {
   const byFilename = new Map<string, string[]>()
   for (const p of paths) {
     const name = p.slice(p.lastIndexOf('/') + 1)
@@ -67,7 +69,42 @@ export function buildImportIndex(paths: string[]): ImportIndex {
     if (existing) existing.push(p)
     else byFilename.set(name, [p])
   }
-  return { allPaths: new Set(paths), byFilename }
+
+  let go: ImportIndex['go']
+  if (goModulePath) {
+    const byDir = new Map<string, string[]>()
+    for (const p of paths) {
+      if (!p.endsWith('.go')) continue
+      const slash = p.lastIndexOf('/')
+      const dir = slash === -1 ? '' : p.slice(0, slash)
+      const existing = byDir.get(dir)
+      if (existing) existing.push(p)
+      else byDir.set(dir, [p])
+    }
+    go = { modulePath: goModulePath, byDir }
+  }
+
+  return { allPaths: new Set(paths), byFilename, go }
+}
+
+/**
+ * Go imports are full paths like "github.com/owner/repo/internal/foo" —
+ * `github.com/owner/repo` is the module root declared in go.mod, and the
+ * remainder is the repo-relative directory of the imported PACKAGE (Go
+ * imports a package/directory, not a specific file). Resolves to one
+ * representative non-test file in that directory so it still functions as a
+ * usable graph edge; a real per-symbol call graph isn't attempted.
+ */
+function resolveGoImport(specifier: string, go: NonNullable<ImportIndex['go']>): string | null {
+  let dir: string
+  if (specifier === go.modulePath) dir = ''
+  else if (specifier.startsWith(go.modulePath + '/')) dir = specifier.slice(go.modulePath.length + 1)
+  else return null // external package (stdlib or a different module) — not in this repo
+
+  const files = go.byDir.get(dir)
+  if (!files || files.length === 0) return null
+  const nonTest = files.filter((f) => !f.endsWith('_test.go'))
+  return (nonTest.length > 0 ? nonTest : files).slice().sort()[0]
 }
 
 /** Resolves `suffix` (e.g. "com/foo/Bar.java") to the one real path ending with it — null if zero or multiple candidates match, rather than guessing wrong. */
@@ -126,17 +163,66 @@ function resolvePythonRelative(fromPath: string, specifier: string, allPaths: Se
 }
 
 /**
+ * Rust's `use a::b::c;` doesn't syntactically distinguish a module path from
+ * an imported ITEM name — unlike Python's `from X import Y` (whose regex
+ * only captures X), the whole "a::b::c" is captured as one specifier, and
+ * the trailing segment might be a submodule file OR a struct/fn/enum
+ * defined inside the second-to-last segment's file. Tries the full path as
+ * a module first, then the path with its last segment dropped (item inside
+ * a module) — covers the overwhelmingly common "import one item" case
+ * without deep ambiguity resolution.
+ */
+function tryRustPath(base: string, allPaths: Set<string>): string | null {
+  if (allPaths.has(`${base}.rs`)) return `${base}.rs`
+  if (allPaths.has(`${base}/mod.rs`)) return `${base}/mod.rs`
+  return null
+}
+
+function resolveRustSegments(segments: string[], resolve: (base: string) => string | null): string | null {
+  if (segments.length === 0) return null
+  const full = resolve(segments.join('/'))
+  if (full) return full
+  if (segments.length > 1) return resolve(segments.slice(0, -1).join('/'))
+  return null
+}
+
+/**
+ * `use crate::a::b::Thing;` is absolute from the crate root, resolved the
+ * same way as Java/Python — suffix-matched, since the crate root is
+ * `src/lib.rs`/`src/main.rs`, never the repo root, and a workspace member
+ * adds another directory level on top of that.
+ */
+function resolveRustCratePath(rest: string, index: ImportIndex): string | null {
+  const segments = rest.split('::').filter(Boolean)
+  return resolveRustSegments(segments, (base) => resolveBySuffix(`${base}.rs`, index) ?? resolveBySuffix(`${base}/mod.rs`, index))
+}
+
+/**
+ * `self::` and `super::` are relative to the CURRENT file's position in the
+ * module tree, which for a plain (non-mod.rs) file is just its own
+ * directory — an approximation, since a `mod foo { ... }` block declared
+ * inline in code (rather than as a separate file) has no filesystem
+ * counterpart at all and isn't something this can see.
+ */
+function resolveRustModRelative(fromPath: string, rest: string, up: number, allPaths: Set<string>): string | null {
+  const dir = fromPath.split('/').slice(0, -1 - up)
+  const segments = rest.split('::').filter(Boolean)
+  return resolveRustSegments(segments, (base) => tryRustPath([...dir, base].join('/'), allPaths))
+}
+
+/**
  * Resolves an import specifier to a repo-relative file path, best-effort.
  * JS/TS specifiers are relative-path-only by convention, so a bare specifier
- * (no leading '.') is a real external package there. Java, Python, and Ruby
- * commonly import their OWN in-repo files without a leading '.' too (fully
- * qualified class names, absolute module paths, load-path-relative
- * requires) — treating every bare specifier as "external" for those
- * languages was silently dropping the large majority of their real edges.
- * Go and Rust also use bare module/crate paths for in-repo imports, but
- * resolving those correctly needs the module's declared root (go.mod's
- * `module` line, Cargo's crate name) which isn't parsed here — left
- * unresolved rather than guessed.
+ * (no leading '.') is a real external package there. Java, Python, Ruby, and
+ * Rust's `crate::`/`self::`/`super::` paths commonly import their OWN
+ * in-repo files without a leading '.' too (fully qualified class names,
+ * absolute module paths, load-path-relative requires, crate-relative module
+ * paths) — treating every bare specifier as "external" for those languages
+ * was silently dropping the large majority of their real edges. Go also uses
+ * bare module paths for in-repo imports, resolved via go.mod's declared
+ * module root (see resolveGoImport/buildImportIndex) when a root go.mod was
+ * found. A bare Rust specifier that isn't crate/self/super-relative (e.g.
+ * `use serde::Deserialize;`) is a genuinely external crate, left unresolved.
  */
 export function resolveImportPath(
   fromPath: string,
@@ -153,7 +239,20 @@ export function resolveImportPath(
     return resolveBySuffix(`${converted}.py`, index) ?? resolveBySuffix(`${converted}/__init__.py`, index)
   }
   if (lang === 'rb') return resolveBySuffix(`${specifier}.rb`, index)
-  return null // external package (JS/TS), or Go/Rust module path (unresolved — see above)
+  if (lang === 'go') return index.go ? resolveGoImport(specifier, index.go) : null
+  if (lang === 'rs') {
+    if (specifier === 'crate' || specifier.startsWith('crate::')) {
+      return resolveRustCratePath(specifier.slice('crate'.length).replace(/^::/, ''), index)
+    }
+    if (specifier === 'self' || specifier.startsWith('self::')) {
+      return resolveRustModRelative(fromPath, specifier.slice('self'.length).replace(/^::/, ''), 0, index.allPaths)
+    }
+    if (specifier === 'super' || specifier.startsWith('super::')) {
+      return resolveRustModRelative(fromPath, specifier.slice('super'.length).replace(/^::/, ''), 1, index.allPaths)
+    }
+    return null // external crate or std/core — not in this repo
+  }
+  return null // external package (JS/TS)
 }
 
 /** Best-effort export symbol extraction (JS/TS only for the fast first pass). */
