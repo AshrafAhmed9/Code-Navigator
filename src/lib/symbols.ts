@@ -28,10 +28,11 @@ function getWorker(): Worker {
     pending.delete(e.data.requestId)
     entry.resolve(e.data)
   }
-  worker.onerror = () => {
+  worker.onerror = (e: ErrorEvent) => {
     // A worker-level (not per-parse) failure — e.g. the wasm bundle itself
     // failed to load. Reject everything currently in flight so callers don't
     // hang forever; future calls will spawn a fresh worker and try again.
+    console.warn('[Code Navigator] parser worker failed to load:', e.message || e)
     for (const [, entry] of pending) entry.reject(new Error('parser worker crashed'))
     pending.clear()
     worker = null
@@ -83,8 +84,13 @@ export async function parseFileSymbols(path: string, source: string, lang: Langu
       })
       w.postMessage({ type: 'parse', requestId, path, source, lang: supported })
     })
-    return result.ok ? result : null
-  } catch {
+    if (!result.ok) {
+      console.warn(`[Code Navigator] tree-sitter parse failed for ${path}:`, result.error)
+      return null
+    }
+    return result
+  } catch (err) {
+    console.warn(`[Code Navigator] tree-sitter parse threw for ${path}:`, err)
     return null
   }
 }
