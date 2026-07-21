@@ -13,6 +13,13 @@ function loadMermaid() {
         startOnLoad: false,
         theme: 'dark',
         securityLevel: 'strict',
+        // Mermaid sizes each node's box from its OWN internal text measurement
+        // pass, using this font — if it doesn't match the font that actually
+        // renders (styles.ts's --cn-sans stack, inherited into the label by
+        // the shadow DOM), the real text can come out wider than the box
+        // mermaid allocated for it, overflowing past the node border. Must be
+        // kept in sync with --cn-sans in styles.ts.
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif',
         flowchart: { htmlLabels: true, curve: 'basis', nodeSpacing: 40, rankSpacing: 60, padding: 20, wrappingWidth: 260 },
       })
       return mermaid
