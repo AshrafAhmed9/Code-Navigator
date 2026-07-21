@@ -213,6 +213,7 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
 
 .cn-loading { display: flex; align-items: center; gap: 9px; color: var(--cn-muted); font-size: 12.5px; }
 .cn-loading-block { display: flex; flex-direction: column; gap: 10px; }
+.cn-index-banner { display: flex; flex-direction: column; gap: 8px; padding: 12px; margin-bottom: 16px; border-radius: 12px; background: var(--cn-card); border: 1px solid var(--cn-hairline-soft); }
 .cn-spinner {
   width: 14px; height: 14px; border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.14); border-top-color: var(--cn-accent);

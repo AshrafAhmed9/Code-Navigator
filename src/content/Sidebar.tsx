@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { parseRepoUrl, resolveCommitSha, fetchRepoTree } from '../lib/github'
-import { buildImportGraph, mostDependedOn } from '../lib/graphBuilder'
+import { buildImportGraph, buildSkeletonGraph, mostDependedOn } from '../lib/graphBuilder'
 import { getGraph, setGraph, deleteGraph, graphKey } from '../lib/cache'
 import { getSettings, saveSettings } from '../lib/settings'
 import { detectCoreSystems } from '../lib/systems'
@@ -102,6 +102,12 @@ export function Sidebar() {
 
         setStatus('indexing')
         const tree = await fetchRepoTree(ref!, commitSha, settings.githubPat)
+        if (cancelled) return
+        // The full file tree is known now, well before per-file content
+        // indexing (the slow part) finishes — surface it immediately so
+        // Tree/Bookmarks/Recent are usable while indexing runs in the
+        // background, instead of blocking the whole panel on it.
+        setGraphState(buildSkeletonGraph(ref!, commitSha, tree))
         const built = await buildImportGraph(ref!, commitSha, tree, settings.githubPat, (done, total) => {
           if (!cancelled) setProgress({ done, total })
         })
@@ -274,7 +280,7 @@ export function Sidebar() {
               </div>
             </div>
 
-            {!prRef && status === 'ready' && graph && view.kind !== 'file' && (
+            {!prRef && (status === 'ready' || status === 'indexing') && graph && view.kind !== 'file' && (
               <div className="cn-tabs">
                 <button className={`cn-tab ${homeTab === 'map' ? 'cn-tab-active' : ''}`} onClick={() => setHomeTab('map')}>
                   Map
@@ -305,29 +311,31 @@ export function Sidebar() {
                       Resolving repository…
                     </div>
                   )}
-                  {status === 'indexing' && (
-                    <div className="cn-loading-block">
-                      <div className="cn-loading">
-                        <span className="cn-spinner" />
-                        Indexing {progress.done}/{progress.total} files…
-                      </div>
-                      <div className="cn-progress-track">
-                        <div className="cn-progress-fill" style={{ width: `${pct}%` }} />
-                      </div>
-                      {!hasPat && (
-                        <a href="#" onClick={openOptions} className="cn-link cn-hint">
-                          Add a token for 83× faster indexing →
-                        </a>
-                      )}
-                    </div>
-                  )}
                   {status === 'error' && <div className="cn-error-block">{error}</div>}
-                  {status === 'ready' && graph && (
+                  {(status === 'indexing' || status === 'ready') && graph && (
                     <ErrorBoundary key={graph.repoKey + graph.commitSha} onReset={() => invalidateGraph(graph.repoKey, graph.commitSha)}>
                       {view.kind === 'file' && graph.files[view.path] ? (
                         <FilePanel graph={graph} path={view.path} />
+                      ) : view.kind === 'file' ? (
+                        <div className="cn-muted">Still indexing — file details will appear once ready.</div>
                       ) : (
                         <>
+                          {status === 'indexing' && (
+                            <div className="cn-index-banner">
+                              <div className="cn-loading">
+                                <span className="cn-spinner" />
+                                Indexing {progress.done}/{progress.total} files… browse below, results fill in as they're ready
+                              </div>
+                              <div className="cn-progress-track">
+                                <div className="cn-progress-fill" style={{ width: `${pct}%` }} />
+                              </div>
+                              {!hasPat && (
+                                <a href="#" onClick={openOptions} className="cn-link cn-hint">
+                                  Add a token for faster indexing →
+                                </a>
+                              )}
+                            </div>
+                          )}
                           <button className="cn-search-trigger" onClick={() => setPaletteOpen(true)}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <circle cx="11" cy="11" r="7" />
@@ -342,6 +350,8 @@ export function Sidebar() {
                             <BookmarksPanel repoKey={graph.repoKey} />
                           ) : homeTab === 'recent' ? (
                             <HistoryPanel repoKey={graph.repoKey} />
+                          ) : status === 'indexing' ? (
+                            <div className="cn-muted">Map view will be available once indexing finishes.</div>
                           ) : (
                             <RepoMapView
                               graph={graph}

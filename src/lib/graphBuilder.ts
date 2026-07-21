@@ -5,6 +5,26 @@ import { extractImportSpecifiers, resolveRelativeImport, extractExportedSymbols 
 import { fetchManyFiles } from './github'
 
 /**
+ * A graph with the full file tree (allPaths) but no import/content data yet —
+ * available the moment the repo tree is fetched, well before per-file content
+ * indexing finishes. Lets the sidebar's Tree/Bookmarks/Recent tabs (which only
+ * need allPaths/repoKey, not the import graph) become usable immediately
+ * instead of being blocked behind the slowest part of indexing.
+ */
+export function buildSkeletonGraph(ref: Pick<RepoRef, 'owner' | 'repo'>, commitSha: string, tree: RepoTree): RepoGraph {
+  return {
+    schemaVersion: REPO_GRAPH_SCHEMA_VERSION,
+    repoKey: `${ref.owner}/${ref.repo}`,
+    commitSha,
+    builtAt: Date.now(),
+    files: {},
+    entryPoints: [],
+    languageBreakdown: {},
+    allPaths: tree.entries.filter((e) => e.type === 'blob').map((e) => e.path),
+  }
+}
+
+/**
  * Builds the file-level import graph for a repo. This is the "cheap, reliable,
  * high-value" layer from the plan — it never requires parsing every file's full
  * AST, just import statements, so it stays fast even on large repos.
@@ -23,7 +43,13 @@ export async function buildImportGraph(
     .filter((p) => CODE_EXTENSIONS.has(p.split('.').pop()?.toLowerCase() ?? ''))
 
   const allPathSet = new Set(codePaths)
-  const contents = await fetchManyFiles(ref, commitSha, codePaths, pat, 8, onProgress)
+  // Each file is its own HTTP round-trip, so concurrency — not bandwidth — is
+  // what dominates wall-clock time on large repos. A PAT'd request uses the
+  // authenticated Contents API (5,000/hr budget), so it can run noticeably
+  // more parallel fetches than the unauthenticated raw.githubusercontent.com
+  // path without either one starving the other's separate rate limit.
+  const concurrency = pat ? 24 : 12
+  const contents = await fetchManyFiles(ref, commitSha, codePaths, pat, concurrency, onProgress)
 
   const files: Record<string, FileNode> = {}
   const languageBreakdown: Record<string, number> = {}
