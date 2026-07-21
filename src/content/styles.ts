@@ -360,8 +360,13 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
 .cn-flow-svg svg { max-width: none; min-width: 500px; overflow: visible; }
 .cn-flow-svg .edgeLabel { background-color: transparent; }
 .cn-flow-svg foreignObject { overflow: visible; }
+.cn-flow-svg foreignObject div { display: flex !important; align-items: center; justify-content: center; width: 100%; height: 100%; }
 .cn-flow-svg .node rect, .cn-flow-svg .node polygon, .cn-flow-svg .node circle { overflow: visible; }
-.cn-flow-svg .nodeLabel { white-space: normal !important; overflow: visible !important; }
+.cn-flow-svg .nodeLabel {
+  white-space: normal !important; overflow: visible !important;
+  text-align: center; display: flex !important; align-items: center; justify-content: center;
+  width: 100%;
+}
 
 .cn-pr-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--cn-hairline-soft); }
 .cn-pr-row:last-child { border-bottom: none; }
