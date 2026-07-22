@@ -1,13 +1,69 @@
 import type { Settings } from './types'
 
-const DEFAULT_MODEL: Record<NonNullable<Settings['llmProvider']>, string> = {
-  anthropic: 'claude-sonnet-5',
-  openai: 'gpt-5',
+export type LlmProviderId = 'anthropic' | 'openai' | 'groq' | 'gemini' | 'custom'
+
+interface ProviderConfig {
+  label: string
+  baseUrl: string
+  defaultModel: string
+}
+
+/**
+ * Anthropic is the only provider with a genuinely different wire format
+ * (its own `messages`/`system`/`content_block_delta` shape, `x-api-key`
+ * auth). Every other provider here — OpenAI itself, and Groq/Gemini's own
+ * OpenAI-compatible endpoints — speaks the same `chat/completions` request
+ * and `choices[].delta.content` streaming format with `Authorization:
+ * Bearer` auth, so they all share streamOpenAICompatible below. This is
+ * also why a "custom" endpoint (any other OpenAI-compatible provider —
+ * Together, Mistral, DeepSeek, OpenRouter, local Ollama/LM Studio, etc.) is
+ * supported for free: it's the same code path with a user-supplied URL.
+ */
+const KNOWN_PROVIDERS: Record<Exclude<LlmProviderId, 'custom'>, ProviderConfig> = {
+  anthropic: { label: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1/messages', defaultModel: 'claude-sonnet-5' },
+  openai: { label: 'OpenAI', baseUrl: 'https://api.openai.com/v1/chat/completions', defaultModel: 'gpt-5' },
+  groq: { label: 'Groq', baseUrl: 'https://api.groq.com/openai/v1/chat/completions', defaultModel: 'llama-3.3-70b-versatile' },
+  gemini: {
+    label: 'Gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    defaultModel: 'gemini-3.5-flash',
+  },
+}
+
+/**
+ * Identifies the provider from the API key's own format — no manual
+ * "which provider is this" selection needed for these four. Order matters:
+ * Anthropic's "sk-ant-" prefix is itself a "sk-" prefix, so it must be
+ * checked before the generic OpenAI "sk-" match.
+ */
+export function detectProvider(apiKey: string): LlmProviderId {
+  const key = apiKey.trim()
+  if (key.startsWith('sk-ant-')) return 'anthropic'
+  if (key.startsWith('gsk_')) return 'groq'
+  if (key.startsWith('AIza')) return 'gemini'
+  if (key.startsWith('sk-')) return 'openai'
+  return 'custom'
+}
+
+export function providerLabel(id: LlmProviderId): string {
+  return id === 'custom' ? 'Unrecognized — treated as a custom OpenAI-compatible endpoint' : KNOWN_PROVIDERS[id].label
 }
 
 export interface LlmRequest {
   system: string
   prompt: string
+}
+
+export function isLlmConfigured(settings: Settings): boolean {
+  const apiKey = settings.llmApiKey?.trim()
+  if (!apiKey) return false
+  // A key we don't recognize has no default endpoint/model to fall back to —
+  // both must be supplied explicitly (the Settings page only shows these
+  // fields once a key resolves to 'custom').
+  if (detectProvider(apiKey) === 'custom') {
+    return !!settings.llmBaseUrl?.trim() && !!settings.llmModel?.trim()
+  }
+  return true
 }
 
 /**
@@ -19,20 +75,29 @@ export async function* streamCompletion(
   settings: Settings,
   req: LlmRequest,
 ): AsyncGenerator<string> {
-  if (!settings.llmProvider || !settings.llmApiKey) {
-    throw new Error('No LLM configured')
-  }
-  const model = settings.llmModel?.trim() || DEFAULT_MODEL[settings.llmProvider]
+  const apiKey = settings.llmApiKey?.trim()
+  if (!apiKey) throw new Error('No LLM configured')
+  const provider = detectProvider(apiKey)
 
-  if (settings.llmProvider === 'anthropic') {
-    yield* streamAnthropic(settings.llmApiKey, model, req)
-  } else {
-    yield* streamOpenAI(settings.llmApiKey, model, req)
+  if (provider === 'anthropic') {
+    const model = settings.llmModel?.trim() || KNOWN_PROVIDERS.anthropic.defaultModel
+    yield* streamAnthropic(apiKey, model, req)
+    return
   }
-}
 
-export function isLlmConfigured(settings: Settings): boolean {
-  return !!(settings.llmProvider && settings.llmApiKey)
+  if (provider === 'custom') {
+    const baseUrl = settings.llmBaseUrl?.trim()
+    const model = settings.llmModel?.trim()
+    if (!baseUrl || !model) {
+      throw new Error('This key\'s provider isn\'t recognized — add its endpoint URL and model name in Settings')
+    }
+    yield* streamOpenAICompatible(baseUrl, apiKey, model, req)
+    return
+  }
+
+  const config = KNOWN_PROVIDERS[provider]
+  const model = settings.llmModel?.trim() || config.defaultModel
+  yield* streamOpenAICompatible(config.baseUrl, apiKey, model, req)
 }
 
 async function* streamAnthropic(apiKey: string, model: string, req: LlmRequest): AsyncGenerator<string> {
@@ -62,8 +127,9 @@ async function* streamAnthropic(apiKey: string, model: string, req: LlmRequest):
   }
 }
 
-async function* streamOpenAI(apiKey: string, model: string, req: LlmRequest): AsyncGenerator<string> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+/** Shared by OpenAI itself and every OpenAI-compatible provider (Groq, Gemini, and any custom endpoint). */
+async function* streamOpenAICompatible(baseUrl: string, apiKey: string, model: string, req: LlmRequest): AsyncGenerator<string> {
+  const res = await fetch(baseUrl, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -72,11 +138,10 @@ async function* streamOpenAI(apiKey: string, model: string, req: LlmRequest): As
     body: JSON.stringify({
       model,
       // GPT-5/o1/o3 reject `max_tokens` outright ("Unsupported parameter")
-      // and require `max_completion_tokens` instead; GPT-4/4o accept both,
-      // so this is the one name that works across the whole model lineup —
-      // not a tradeoff. `gpt-5` is this extension's own OpenAI default, so
-      // the old field name would have hard-failed every default-settings
-      // OpenAI user.
+      // and require `max_completion_tokens` instead; GPT-4/4o and every
+      // other OpenAI-compatible provider tested (Groq, Gemini) accept both,
+      // so this is the one name that works across the whole lineup — not a
+      // tradeoff.
       max_completion_tokens: 500,
       messages: [
         { role: 'system', content: req.system },
@@ -86,7 +151,7 @@ async function* streamOpenAI(apiKey: string, model: string, req: LlmRequest): As
     }),
   })
   if (!res.ok || !res.body) {
-    throw new Error(`OpenAI API ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`)
+    throw new Error(`LLM API ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`)
   }
   for await (const event of parseSse(res.body)) {
     const text = event.choices?.[0]?.delta?.content

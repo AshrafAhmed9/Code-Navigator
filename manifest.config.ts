@@ -54,7 +54,19 @@ export default defineManifest({
     'https://raw.githubusercontent.com/*',
     'https://api.anthropic.com/*',
     'https://api.openai.com/*',
+    'https://api.groq.com/*',
+    'https://generativelanguage.googleapis.com/*',
   ],
+  // For a "custom" LLM key (one that doesn't match a recognized provider's
+  // format — Together, Mistral, DeepSeek, OpenRouter, a local Ollama server,
+  // etc.), the endpoint is whatever the user types in. We can't know it ahead
+  // of time, so it can't go in host_permissions above — that's requested at
+  // runtime, scoped to just that one host, only when the user actually saves
+  // a custom endpoint (see src/lib/permissions.ts). Declaring '<all_urls>' as
+  // required up front instead would both trigger Chrome's broadest install
+  // warning and be a red flag in store review, for a capability almost nobody
+  // configures.
+  optional_host_permissions: ['<all_urls>'],
   web_accessible_resources: [
     {
       // Tree-sitter grammar files. Fetched by the background service worker

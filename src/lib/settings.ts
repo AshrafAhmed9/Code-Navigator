@@ -4,7 +4,7 @@ import type { Settings } from './types'
 // silently written but never loaded back (dock side, font, and the onboarding
 // flag all regressed this way: saved on change, but gone on the next reload).
 const SETTINGS_KEYS: (keyof Settings)[] = [
-  'githubPat', 'llmProvider', 'llmApiKey', 'llmModel', 'dockSide', 'codeFont', 'onboardedAt',
+  'githubPat', 'llmApiKey', 'llmBaseUrl', 'llmModel', 'dockSide', 'codeFont', 'onboardedAt',
 ]
 
 export async function getSettings(): Promise<Settings> {

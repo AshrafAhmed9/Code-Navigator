@@ -35,8 +35,9 @@ browser.
 
 **Stays out of your way**
 - Fully client-side — no Code Navigator servers exist.
-- Bring your own GitHub token and LLM key (Anthropic or OpenAI) — both stored
-  only in your browser, never sent anywhere else. See the
+- Bring your own GitHub token and LLM key (Anthropic, OpenAI, Groq, Gemini —
+  auto-detected — or any other OpenAI-compatible endpoint) — both stored only
+  in your browser, never sent anywhere else. See the
   [privacy policy](./privacy.md).
 - Works keyless within GitHub's public rate limit; graph features never
   require an LLM key.

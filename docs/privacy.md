@@ -10,11 +10,14 @@ Navigator server, no telemetry, and no analytics of any kind.
   `Authorization` header on requests to `api.github.com`, to raise your GitHub
   API rate limit from 60 to 5,000 requests/hour. It is never sent anywhere
   else.
-- **LLM API key (Anthropic or OpenAI, optional)** — stored only in
-  `chrome.storage.local`. It is sent only to `api.anthropic.com` or
-  `api.openai.com` (whichever you configure), directly from your browser, only
-  when you trigger an LLM-powered explanation. If no key is configured, no LLM
-  requests are ever made.
+- **LLM API key (optional)** — stored only in `chrome.storage.local`. The
+  provider is detected from the key itself (Anthropic, OpenAI, Groq, and
+  Gemini are recognized automatically; any other OpenAI-compatible endpoint
+  can be configured manually). The key is sent only to that one provider's
+  API, directly from your browser, only when you trigger an LLM-powered
+  explanation. If no key is configured, no LLM requests are ever made. A
+  manually-configured custom endpoint requires a one-time permission grant
+  (Chrome's own permission prompt) scoped to just that endpoint's domain.
 - **Repository data** — file trees, file contents, and commit metadata are
   fetched directly from `api.github.com` for repositories you visit, cached
   locally (IndexedDB) by commit SHA to avoid refetching, and never sent

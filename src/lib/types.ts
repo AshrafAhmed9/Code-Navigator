@@ -74,8 +74,11 @@ export interface RepoGraph {
 
 export interface Settings {
   githubPat?: string
-  llmProvider?: 'anthropic' | 'openai'
+  /** Provider is auto-detected from the key's own format at call time — see detectProvider() in lib/llm.ts. */
   llmApiKey?: string
+  /** Only needed (and only shown in Settings) when the key doesn't match a recognized provider — the endpoint for any OpenAI-compatible API. */
+  llmBaseUrl?: string
+  /** Optional override of the provider's default model; required when llmBaseUrl is set (a custom endpoint has no sensible default to guess). */
   llmModel?: string
   dockSide?: 'left' | 'right'
   codeFont?: 'sans' | 'mono'

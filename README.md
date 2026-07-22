@@ -9,9 +9,13 @@ architecture, built into the browser.
 
 Everything runs **client-side** — there is no backend and no hosting cost.
 It fetches files via the GitHub API, builds a real dependency graph
-in-memory, and optionally calls **your own** LLM API key (Anthropic or
-OpenAI) directly from the browser for natural-language explanations grounded
-in that graph. Nothing is ever proxied through a server this project runs.
+in-memory, and optionally calls **your own** LLM API key directly from the
+browser for natural-language explanations grounded in that graph. The
+provider is auto-detected from the key itself (Anthropic, OpenAI, Groq, and
+Gemini are recognized automatically — no dropdown to fill in), and any other
+OpenAI-compatible endpoint (Together, Mistral, DeepSeek, OpenRouter, a local
+Ollama/LM Studio server, etc.) works too via a one-time endpoint URL. Nothing
+is ever proxied through a server this project runs.
 
 > Best tried on a real, unfamiliar repo (e.g. `expressjs/express`), not a
 > tiny one — the value is orienting you in a codebase too large to read file
@@ -385,7 +389,7 @@ Open the extension's options page (auto-opens on first install, or via
 | Setting | Effect | Required? |
 |---|---|---|
 | GitHub Personal Access Token | Raises the GitHub API rate limit from 60 to 5,000 req/hr; needed for private repos (`repo` scope) | No |
-| LLM Provider + API Key + Model | Unlocks Purpose, Why Is This Here, What Breaks, What Should I Test, Explain This PR, and the Find X narrative | No |
+| LLM API Key (provider auto-detected) | Unlocks Purpose, Why Is This Here, What Breaks, What Should I Test, Explain This PR, and the Find X narrative | No |
 | Sidebar dock position | Left or right edge | No (defaults right) |
 | Code font | System font or monospace | No (defaults system) |
 
