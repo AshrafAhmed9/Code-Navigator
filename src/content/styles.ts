@@ -82,10 +82,11 @@ export const styles = `
   border: 1px solid var(--cn-hairline);
   border-right: none;
   border-radius: 14px 0 0 14px;
-  cursor: pointer;
+  cursor: grab;
   transition: background 0.2s var(--cn-ease), color 0.2s var(--cn-ease), transform 0.2s var(--cn-ease);
 }
 .cn-toggle:hover { color: var(--cn-accent); transform: scale(1.04); }
+.cn-toggle:active { cursor: grabbing; }
 .cn-toggle:active { transform: scale(0.97); }
 .cn-root.cn-collapsed .cn-toggle { border-radius: 14px; border-right: 1px solid var(--cn-hairline); }
 

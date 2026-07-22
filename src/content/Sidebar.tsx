@@ -72,6 +72,12 @@ export function Sidebar() {
   const [pinnedWidth, setPinnedWidth] = useState(() => Number(localStorage.getItem('cn-pinned-width')) || 480)
   const pinnedWidthRef = useRef(pinnedWidth)
   const resizeState = useRef<{ startX: number; startWidth: number } | null>(null)
+  // Hover peek: while collapsed, hovering the edge button slides the panel
+  // out as a preview; it retreats the moment the cursor leaves. Only an
+  // explicit click actually locks it open (or closed) — hover never changes
+  // `collapsed` itself, just whether the panel is shown.
+  const [hoverPreview, setHoverPreview] = useState(false)
+  const hoverCloseTimer = useRef<number | null>(null)
 
   // Reactive to Turbo SPA navigation — never read the URL only once, or the
   // sidebar shows stale data (or nothing) after an in-page navigation until a
@@ -210,11 +216,15 @@ export function Sidebar() {
       localStorage.setItem('cn-collapsed', c ? '0' : '1')
       return !c
     })
+    // An explicit click is authoritative — if the user clicks to collapse
+    // while still hovering, it must actually collapse rather than being
+    // held open by the stale hover-preview flag until the cursor moves.
+    setHoverPreview(false)
   }
 
-  function toggleDock() {
-    setDockSide((d) => {
-      const next = d === 'left' ? 'right' : 'left'
+  function setDockSideTo(next: 'left' | 'right') {
+    setDockSide((prev) => {
+      if (prev === next) return prev
       saveSettings({ dockSide: next })
       return next
     })
@@ -229,8 +239,8 @@ export function Sidebar() {
   }
 
   // Pinned mode pushes GitHub's own page content over to reserve room for the
-  // sidebar (like Octotree's pin), instead of floating on top of it — and the
-  // panel itself widens (drag-resizable) rather than staying the same size.
+  // sidebar, instead of floating on top of it — and the panel itself widens
+  // (drag-resizable) rather than staying the same size.
   useEffect(() => {
     const html = document.documentElement
     const marginProp = dockSide === 'left' ? 'marginLeft' : 'marginRight'
@@ -272,6 +282,58 @@ export function Sidebar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onResizeMove])
 
+  // Dragging the edge toggle to the opposite half of the screen switches
+  // which side it's docked on — replaces the old dedicated "switch side"
+  // button. A short drag (below the move threshold) is treated as a plain
+  // click instead, so the existing collapse/expand behavior on click still
+  // works; only a real horizontal drag re-docks.
+  const DRAG_MOVE_THRESHOLD = 6
+  const toggleDragState = useRef<{ startX: number; startY: number; moved: boolean } | null>(null)
+
+  const onToggleDragMove = useCallback((e: PointerEvent) => {
+    if (!toggleDragState.current) return
+    const dx = e.clientX - toggleDragState.current.startX
+    const dy = e.clientY - toggleDragState.current.startY
+    if (Math.abs(dx) > DRAG_MOVE_THRESHOLD || Math.abs(dy) > DRAG_MOVE_THRESHOLD) {
+      toggleDragState.current.moved = true
+      setDockSideTo(e.clientX < window.innerWidth / 2 ? 'left' : 'right')
+    }
+  }, [])
+  const onToggleDragUp = useCallback((e: PointerEvent) => {
+    const state = toggleDragState.current
+    toggleDragState.current = null
+    document.body.style.userSelect = ''
+    window.removeEventListener('pointermove', onToggleDragMove)
+    window.removeEventListener('pointerup', onToggleDragUp)
+    if (state && !state.moved) toggle()
+    else if (state) setDockSideTo(e.clientX < window.innerWidth / 2 ? 'left' : 'right')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onToggleDragMove])
+  function onToggleDragDown(e: React.PointerEvent) {
+    toggleDragState.current = { startX: e.clientX, startY: e.clientY, moved: false }
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', onToggleDragMove)
+    window.addEventListener('pointerup', onToggleDragUp)
+  }
+
+  function onRootMouseEnter() {
+    if (!collapsed) return
+    if (hoverCloseTimer.current) {
+      window.clearTimeout(hoverCloseTimer.current)
+      hoverCloseTimer.current = null
+    }
+    setHoverPreview(true)
+  }
+  function onRootMouseLeave() {
+    if (!collapsed) return
+    // A short delay rather than closing instantly — avoids a flicker if the
+    // cursor briefly crosses the gap between the toggle button and the panel.
+    hoverCloseTimer.current = window.setTimeout(() => setHoverPreview(false), 150)
+  }
+  useEffect(() => () => {
+    if (hoverCloseTimer.current) window.clearTimeout(hoverCloseTimer.current)
+  }, [])
+
   function onResizeDown(e: React.PointerEvent) {
     resizeState.current = { startX: e.clientX, startWidth: pinnedWidth }
     document.body.style.userSelect = 'none'
@@ -288,18 +350,24 @@ export function Sidebar() {
     <>
       <style>{styles}</style>
       <div
-        className={`cn-root ${collapsed ? 'cn-collapsed' : ''} ${dockSide === 'left' ? 'cn-dock-left' : ''} ${
+        className={`cn-root ${!collapsed || hoverPreview ? '' : 'cn-collapsed'} ${dockSide === 'left' ? 'cn-dock-left' : ''} ${
           codeFont === 'mono' ? 'cn-font-mono' : ''
         } ${pinned && !collapsed ? 'cn-pinned' : ''}`}
         data-theme={theme}
+        onMouseEnter={onRootMouseEnter}
+        onMouseLeave={onRootMouseLeave}
       >
-        <button className="cn-toggle" onClick={toggle} title="Code Navigator (⌘K to search)">
+        <button
+          className="cn-toggle"
+          onPointerDown={onToggleDragDown}
+          title={collapsed ? 'Code Navigator — hover to preview, click to keep open, drag to switch sides (⌘K to search)' : 'Code Navigator — click to collapse, drag to switch sides (⌘K to search)'}
+        >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="7" />
             <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
           </svg>
         </button>
-        {!collapsed && (
+        {(!collapsed || hoverPreview) && (
           <div className="cn-panel" style={pinned ? { width: pinnedWidth } : undefined}>
             {pinned && (
               <div
@@ -338,17 +406,6 @@ export function Sidebar() {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill={pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="9" r="4" />
                     <path d="M12 13v8" strokeLinecap="round" />
-                  </svg>
-                </button>
-                <button className="cn-collapse-btn" onClick={toggleDock} title="Switch side">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M7 4v16M17 4v16" strokeLinecap="round" />
-                    <path d={dockSide === 'left' ? 'M14 9l3 3-3 3' : 'M10 9l-3 3 3 3'} strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-                <button className="cn-collapse-btn" onClick={toggle} title="Collapse">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
               </div>
