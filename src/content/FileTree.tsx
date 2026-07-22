@@ -42,6 +42,20 @@ export function FileTree({ graph }: { graph: RepoGraph }) {
     localStorage.setItem(`cn-tree-expanded-v2:${graph.repoKey}`, JSON.stringify(Array.from(expanded)))
   }, [expanded, graph.repoKey])
 
+  // TreeRow used to render every folder's children unconditionally — the
+  // grid-template-rows CSS trick that animates expand/collapse needs the
+  // content already in the DOM to transition smoothly. Fine for a small
+  // repo, but on a huge one (kubernetes-scale) that means tens of thousands
+  // of TreeRow + BookmarkStar instances (each firing its own chrome.storage
+  // read) mount immediately regardless of collapse state — the real cost
+  // behind "tab switching still isn't snappy," since toggling the tab's
+  // outer visibility still forces the browser to lay out that entire hidden
+  // subtree. Only rendering a folder's children once it's actually been
+  // opened (and keeping them mounted after, same pattern as the tab fix)
+  // keeps the animation for anything you interact with while never paying
+  // the cost for the other 99% of a huge repo you haven't explored.
+  const [everExpanded, setEverExpanded] = useState<Set<string>>(() => expanded)
+
   const matchSet = useMemo(() => {
     if (!query.trim()) return null
     const q = query.toLowerCase()
@@ -63,6 +77,7 @@ export function FileTree({ graph }: { graph: RepoGraph }) {
       else next.add(path)
       return next
     })
+    setEverExpanded((prev) => (prev.has(path) ? prev : new Set(prev).add(path)))
   }
 
   return (
@@ -82,7 +97,15 @@ export function FileTree({ graph }: { graph: RepoGraph }) {
       </div>
       <div className="cn-tree">
         {tree.map((node) => (
-          <TreeRow key={node.path} node={node} graph={graph} expanded={expanded} onToggleFolder={toggleFolder} matchSet={matchSet} />
+          <TreeRow
+            key={node.path}
+            node={node}
+            graph={graph}
+            expanded={expanded}
+            everExpanded={everExpanded}
+            onToggleFolder={toggleFolder}
+            matchSet={matchSet}
+          />
         ))}
       </div>
     </div>
@@ -93,12 +116,14 @@ function TreeRow({
   node,
   graph,
   expanded,
+  everExpanded,
   onToggleFolder,
   matchSet,
 }: {
   node: TreeNode
   graph: RepoGraph
   expanded: Set<string>
+  everExpanded: Set<string>
   onToggleFolder: (path: string) => void
   matchSet: { matches: Set<string>; autoExpand: Set<string> } | null
 }) {
@@ -122,6 +147,10 @@ function TreeRow({
   }
 
   const isOpen = matchSet ? true : expanded.has(node.path)
+  // Search force-opens matching branches regardless of prior manual
+  // expansion — those children need to actually render too, not just show
+  // as "open" with nothing inside.
+  const shouldRenderChildren = matchSet ? true : everExpanded.has(node.path)
   return (
     <div className="cn-tree-node">
       <button className="cn-tree-row cn-tree-folder" onClick={() => onToggleFolder(node.path)}>
@@ -143,9 +172,18 @@ function TreeRow({
       <div className={`cn-tree-children-wrap ${isOpen ? 'cn-open' : ''}`}>
         <div className="cn-tree-children-inner">
           <div className="cn-tree-children">
-            {node.children.map((child) => (
-              <TreeRow key={child.path} node={child} graph={graph} expanded={expanded} onToggleFolder={onToggleFolder} matchSet={matchSet} />
-            ))}
+            {shouldRenderChildren &&
+              node.children.map((child) => (
+                <TreeRow
+                  key={child.path}
+                  node={child}
+                  graph={graph}
+                  expanded={expanded}
+                  everExpanded={everExpanded}
+                  onToggleFolder={onToggleFolder}
+                  matchSet={matchSet}
+                />
+              ))}
           </div>
         </div>
       </div>
