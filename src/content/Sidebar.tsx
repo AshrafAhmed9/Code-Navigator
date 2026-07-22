@@ -355,7 +355,13 @@ export function Sidebar() {
     window.addEventListener('pointerup', onToggleDragUp)
   }
 
-  function onRootMouseEnter() {
+  // Attached to the toggle and the panel specifically — not the drag grip,
+  // and not cn-root as a whole — so only "hovering the search icon" (or the
+  // open panel itself, so you can actually move into it to interact) keeps
+  // the peek alive. Hovering the grip is deliberately inert: it neither
+  // opens nor holds the peek open, since it's meant to be grabbed for
+  // dragging, not mistaken for another way to reveal the panel.
+  function onHoverKeepAliveEnter() {
     if (!collapsed) return
     if (hoverCloseTimer.current) {
       window.clearTimeout(hoverCloseTimer.current)
@@ -370,7 +376,7 @@ export function Sidebar() {
       }, 300)
     }
   }
-  function onRootMouseLeave() {
+  function onHoverKeepAliveLeave() {
     if (hoverOpenTimer.current) {
       window.clearTimeout(hoverOpenTimer.current)
       hoverOpenTimer.current = null
@@ -405,8 +411,6 @@ export function Sidebar() {
           codeFont === 'mono' ? 'cn-font-mono' : ''
         } ${pinned && !collapsed ? 'cn-pinned' : ''}`}
         data-theme={theme}
-        onMouseEnter={onRootMouseEnter}
-        onMouseLeave={onRootMouseLeave}
       >
         <div
           className="cn-edge-controls"
@@ -424,8 +428,10 @@ export function Sidebar() {
         >
           <button
             className="cn-toggle"
-            onPointerDown={onToggleDragDown}
-            title={collapsed ? 'Code Navigator — hover to preview, click to keep open, drag to move (⌘K to search)' : 'Code Navigator — click to collapse, drag to move (⌘K to search)'}
+            onClick={toggle}
+            onMouseEnter={onHoverKeepAliveEnter}
+            onMouseLeave={onHoverKeepAliveLeave}
+            title={collapsed ? 'Code Navigator — hover to preview, click to keep open (⌘K to search)' : 'Code Navigator — click to collapse (⌘K to search)'}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="7" />
@@ -438,7 +444,12 @@ export function Sidebar() {
             <span />
           </div>
         </div>
-        <div className={`cn-panel ${!collapsed || hoverPreview ? '' : 'cn-panel-hidden'}`} style={{ width: pinnedWidth }}>
+        <div
+          className={`cn-panel ${!collapsed || hoverPreview ? '' : 'cn-panel-hidden'}`}
+          style={{ width: pinnedWidth }}
+          onMouseEnter={onHoverKeepAliveEnter}
+          onMouseLeave={onHoverKeepAliveLeave}
+        >
             <div
               className={`cn-resize-handle ${dockSide === 'left' ? 'cn-resize-handle-left' : ''}`}
               onPointerDown={onResizeDown}
