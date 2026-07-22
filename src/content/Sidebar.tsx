@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { parseRepoUrl, resolveCommitSha, fetchRepoTree } from '../lib/github'
+import { parseRepoUrl, parsePullRequestUrl, resolveCommitSha, fetchRepoTree, type PrRef } from '../lib/github'
 import { buildImportGraph, buildSkeletonGraph, mostDependedOn } from '../lib/graphBuilder'
 import { getGraph, setGraph, deleteGraph, graphKey } from '../lib/cache'
 import { getSettings, saveSettings } from '../lib/settings'
 import { detectCoreSystems } from '../lib/systems'
 import { detectGitHubTheme, watchGitHubTheme, type Theme } from '../lib/githubTheme'
 import { classifyUrl, isBookmarked, toggleBookmark, type Bookmark } from '../lib/bookmarks'
+import { getCurrentHref, onNavigate } from '../lib/navigation'
+import { recordVisit } from '../lib/history'
 import type { RepoGraph } from '../lib/types'
 import { FilePanel } from './FilePanel'
 import { FlowView } from './FlowView'
 import { CommandPalette } from './CommandPalette'
-import { PrPanel, usePrRef } from './PrPanel'
+import { PrPanel } from './PrPanel'
 import { FileTree } from './FileTree'
 import { BookmarksPanel } from './BookmarksPanel'
 import { HistoryPanel } from './HistoryPanel'
@@ -28,6 +30,14 @@ type View =
   | { kind: 'flow'; root: string }
   | { kind: 'tour'; root: string; label?: string }
 type HomeTab = 'map' | 'tree' | 'bookmarks' | 'recent'
+
+/** GitHub's own top-level routes that share the `/{first}/{second}` shape of a repo URL but aren't repos. */
+const RESERVED_OWNERS = new Set([
+  'settings', 'notifications', 'marketplace', 'sponsors', 'orgs', 'features',
+  'pricing', 'about', 'explore', 'topics', 'trending', 'collections', 'events',
+  'codespaces', 'new', 'login', 'join', 'search', 'pulls', 'issues', 'dashboard',
+  'account', 'apps', 'organizations', 'watching', 'stars',
+])
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('cn-collapsed') === '1')
@@ -48,13 +58,49 @@ export function Sidebar() {
   const pinnedWidthRef = useRef(pinnedWidth)
   const resizeState = useRef<{ startX: number; startWidth: number } | null>(null)
 
-  const prRef = usePrRef()
-  const ref = useMemo(() => parseRepoUrl(window.location.href), [])
-  const initialFilePath = useMemo(() => extractFilePathFromUrl(window.location.pathname, ref), [ref])
+  // Reactive to Turbo SPA navigation — never read the URL only once, or the
+  // sidebar shows stale data (or nothing) after an in-page navigation until a
+  // manual refresh. See src/lib/navigation.ts.
+  const href = useCurrentHref()
 
+  // `ref` keeps a stable identity while you're within one repo (only its
+  // owner/repo matter), so navigating between files in the same repo doesn't
+  // needlessly re-trigger the indexing effect below; it changes only when the
+  // repo actually changes.
+  const repoSlug = useMemo(() => {
+    const r = parseRepoUrl(href)
+    // Exclude GitHub's own top-level routes that happen to look like
+    // `/owner/repo` (e.g. /orgs/x, /settings/y, /marketplace/z) — indexing
+    // those as if they were repos just produces a 404.
+    if (!r || RESERVED_OWNERS.has(r.owner.toLowerCase())) return null
+    return `${r.owner}/${r.repo}`
+  }, [href])
+  const ref = useMemo(
+    () => (repoSlug ? { owner: repoSlug.split('/')[0], repo: repoSlug.split('/')[1], ref: 'HEAD' } : null),
+    [repoSlug],
+  )
+  const prNumber = useMemo(() => parsePullRequestUrl(href)?.number ?? null, [href])
+  const prRef = useMemo<PrRef | null>(
+    () => (repoSlug && prNumber != null ? { owner: repoSlug.split('/')[0], repo: repoSlug.split('/')[1], number: prNumber } : null),
+    [repoSlug, prNumber],
+  )
+
+  // Keep the in-panel view in sync with the page URL: show the file panel on a
+  // blob URL, otherwise fall back to the repo map — but leave internal overlay
+  // views (flow/tour, opened from inside the sidebar without a URL change)
+  // untouched.
   useEffect(() => {
-    if (initialFilePath) setView({ kind: 'file', path: initialFilePath })
-  }, [initialFilePath])
+    const filePath = ref ? extractFilePathFromUrl(new URL(href).pathname, ref) : null
+    if (filePath) setView({ kind: 'file', path: filePath })
+    else setView((v) => (v.kind === 'file' ? { kind: 'repo-map' } : v))
+  }, [href, ref])
+
+  // Record the visit for the Recent tab whenever we land on a repo page.
+  useEffect(() => {
+    if (!ref) return
+    const title = document.title.replace(/\s*·\s*GitHub.*$/, '')
+    recordVisit(href.split('#')[0], title)
+  }, [href, ref])
 
   useEffect(() => {
     getSettings().then((s) => {
@@ -71,6 +117,10 @@ export function Sidebar() {
   useEffect(() => watchGitHubTheme(setTheme), [])
 
   useEffect(() => {
+    // Only hijack ⌘K on repo pages — we now mount on every github.com page, and
+    // stealing the shortcut on pages where the palette can't even open would be
+    // an unwelcome surprise.
+    if (!ref) return
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
@@ -79,11 +129,17 @@ export function Sidebar() {
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [])
+  }, [ref])
 
   useEffect(() => {
     if (!ref || prRef) return
     let cancelled = false
+
+    // Synchronously clear the previous repo's graph so navigating between repos
+    // never briefly shows the old repo's data under the new repo's header.
+    setStatus('resolving')
+    setGraphState(null)
+    setProgress({ done: 0, total: 0 })
 
     async function run() {
       try {
@@ -163,7 +219,10 @@ export function Sidebar() {
   useEffect(() => {
     const html = document.documentElement
     const marginProp = dockSide === 'left' ? 'marginLeft' : 'marginRight'
-    if (pinned && !collapsed) {
+    // `ref &&` guard: we mount on every github.com page, but the sidebar is only
+    // visible on repo pages — never push the page content over for an invisible
+    // panel on a non-repo page.
+    if (ref && pinned && !collapsed) {
       html.style[marginProp] = `${pinnedWidth + 42}px`
       html.style.transition = resizeState.current ? 'none' : 'margin 0.2s ease'
     } else {
@@ -174,7 +233,7 @@ export function Sidebar() {
       html.style.marginLeft = ''
       html.style.marginRight = ''
     }
-  }, [pinned, collapsed, dockSide, pinnedWidth])
+  }, [ref, pinned, collapsed, dockSide, pinnedWidth])
 
   const MIN_PINNED_WIDTH = 340
   const MAX_PINNED_WIDTH = 880
@@ -401,7 +460,8 @@ export function Sidebar() {
 }
 
 function PageBookmarkButton() {
-  const url = window.location.href.split('#')[0]
+  const href = useCurrentHref()
+  const url = href.split('#')[0]
   const classified = useMemo(() => classifyUrl(url), [url])
   const [marked, setMarked] = useState(false)
 
@@ -430,6 +490,13 @@ function PageBookmarkButton() {
       </svg>
     </button>
   )
+}
+
+/** Re-renders the subscribing component whenever the page URL changes (Turbo-aware). */
+function useCurrentHref(): string {
+  const [href, setHref] = useState(getCurrentHref)
+  useEffect(() => onNavigate(setHref), [])
+  return href
 }
 
 function RepoMapView({

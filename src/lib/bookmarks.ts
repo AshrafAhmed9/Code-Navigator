@@ -18,25 +18,41 @@ export async function isBookmarked(url: string): Promise<boolean> {
   return marks.some((b) => b.url === url)
 }
 
-export async function addBookmark(bookmark: Bookmark): Promise<void> {
-  const marks = await getBookmarks()
-  if (marks.some((b) => b.url === bookmark.url)) return
-  await chrome.storage.local.set({ [STORAGE_KEY]: [bookmark, ...marks] })
+// Serialize all mutations: each is a read-modify-write on chrome.storage, so
+// two quick stars/unstars could otherwise both read the same list and the
+// second write would clobber the first. Chaining makes each see the prior result.
+let writeChain: Promise<unknown> = Promise.resolve()
+function enqueue<T>(op: () => Promise<T>): Promise<T> {
+  const next = writeChain.then(op)
+  writeChain = next.catch(() => {})
+  return next
 }
 
-export async function removeBookmark(url: string): Promise<void> {
-  const marks = await getBookmarks()
-  await chrome.storage.local.set({ [STORAGE_KEY]: marks.filter((b) => b.url !== url) })
+export function addBookmark(bookmark: Bookmark): Promise<void> {
+  return enqueue(async () => {
+    const marks = await getBookmarks()
+    if (marks.some((b) => b.url === bookmark.url)) return
+    await chrome.storage.local.set({ [STORAGE_KEY]: [bookmark, ...marks] })
+  })
 }
 
-export async function toggleBookmark(bookmark: Bookmark): Promise<boolean> {
-  const already = await isBookmarked(bookmark.url)
-  if (already) {
-    await removeBookmark(bookmark.url)
-    return false
-  }
-  await addBookmark(bookmark)
-  return true
+export function removeBookmark(url: string): Promise<void> {
+  return enqueue(async () => {
+    const marks = await getBookmarks()
+    await chrome.storage.local.set({ [STORAGE_KEY]: marks.filter((b) => b.url !== url) })
+  })
+}
+
+export function toggleBookmark(bookmark: Bookmark): Promise<boolean> {
+  return enqueue(async () => {
+    const marks = await getBookmarks()
+    if (marks.some((b) => b.url === bookmark.url)) {
+      await chrome.storage.local.set({ [STORAGE_KEY]: marks.filter((b) => b.url !== bookmark.url) })
+      return false
+    }
+    await chrome.storage.local.set({ [STORAGE_KEY]: [bookmark, ...marks] })
+    return true
+  })
 }
 
 export function classifyUrl(url: string): { kind: Bookmark['kind']; repoKey: string } | null {

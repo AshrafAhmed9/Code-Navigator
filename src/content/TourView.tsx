@@ -20,7 +20,7 @@ export function TourView({ graph, root, label, onClose }: { graph: RepoGraph; ro
     })
   }
 
-  const progressPct = Math.round((readSteps.size / tour.steps.length) * 100)
+  const progressPct = tour.steps.length > 0 ? Math.round((readSteps.size / tour.steps.length) * 100) : 0
 
   return (
     <div className="cn-modal-backdrop" onClick={onClose}>

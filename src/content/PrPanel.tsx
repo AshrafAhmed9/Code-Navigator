@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { parsePullRequestUrl, fetchPrInfo, resolveCommitSha, fetchRepoTree, type PrRef } from '../lib/github'
+import { fetchPrInfo, resolveCommitSha, fetchRepoTree, type PrRef } from '../lib/github'
 import { buildImportGraph, computeImpact } from '../lib/graphBuilder'
 import { relatedTests } from '../lib/graphBuilder'
 import { getGraph, setGraph, graphKey } from '../lib/cache'
@@ -159,19 +159,4 @@ export function PrPanel({ pr }: { pr: PrRef }) {
       )}
     </div>
   )
-}
-
-export function usePrRef(): PrRef | null {
-  const [pr, setPr] = useState<PrRef | null>(() => parsePullRequestUrl(window.location.href))
-  useEffect(() => {
-    const check = () => setPr(parsePullRequestUrl(window.location.href))
-    const observer = new MutationObserver(check)
-    observer.observe(document.body, { childList: true, subtree: false })
-    window.addEventListener('popstate', check)
-    return () => {
-      observer.disconnect()
-      window.removeEventListener('popstate', check)
-    }
-  }, [])
-  return pr
 }

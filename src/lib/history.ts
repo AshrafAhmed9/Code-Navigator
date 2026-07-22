@@ -16,8 +16,21 @@ export async function getHistory(): Promise<HistoryEntry[]> {
   return (result[STORAGE_KEY] as HistoryEntry[] | undefined) ?? []
 }
 
+// recordVisit is a read-modify-write on chrome.storage and now fires on every
+// navigation — two quick navigations could otherwise both read the same list
+// and the second write would clobber the first, losing an entry. Chaining the
+// writes serializes them so each sees the previous one's result.
+let writeChain: Promise<void> = Promise.resolve()
+
 /** Records a visit, moving an already-present URL to the front instead of duplicating it. */
-export async function recordVisit(url: string, title: string): Promise<void> {
+export function recordVisit(url: string, title: string): Promise<void> {
+  writeChain = writeChain.then(() => doRecordVisit(url, title)).catch((e) => {
+    console.error('Code Navigator failed to record visit', e)
+  })
+  return writeChain
+}
+
+async function doRecordVisit(url: string, title: string): Promise<void> {
   const classified = classifyUrl(url)
   if (!classified || classified.kind === 'page') return // skip settings/marketplace/etc noise
 

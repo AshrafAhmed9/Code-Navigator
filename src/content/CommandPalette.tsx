@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RepoGraph } from '../lib/types'
 import { findFiles, type FindResult } from '../lib/find'
 import { detectCoreSystems } from '../lib/systems'
@@ -23,7 +23,9 @@ export function CommandPalette({
   const inputRef = useRef<HTMLInputElement>(null)
   const narrativeToken = useRef(0)
 
-  const systems = detectCoreSystems(graph)
+  // Memoized — detectCoreSystems scans every file in the graph, and without
+  // this it re-ran on every keystroke (each query update re-renders).
+  const systems = useMemo(() => detectCoreSystems(graph), [graph])
 
   useEffect(() => {
     inputRef.current?.focus()
