@@ -41,8 +41,15 @@ Navigator server, no telemetry, and no analytics of any kind.
 - `storage` / `unlimitedStorage` — for the local caching and settings
   described above.
 - Host access to `github.com` — to inject the sidebar UI.
-- Host access to `api.github.com`, `api.anthropic.com`, `api.openai.com` — the
-  only network destinations the extension ever talks to.
+- Host access to `api.github.com` and `raw.githubusercontent.com` — fetching
+  repository data, including the keyless path used when no GitHub token is
+  configured.
+- Host access to `api.anthropic.com`, `api.openai.com`, `api.groq.com`, and
+  `generativelanguage.googleapis.com` — the recognized LLM providers. A
+  manually-configured custom/OpenAI-compatible endpoint requests its own
+  permission at runtime instead, scoped to just that one domain, only when
+  you save one.
+- These are the only network destinations the extension ever talks to.
 
 ## Questions
 
