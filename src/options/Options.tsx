@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { getSettings, saveSettings } from '../lib/settings'
 import { detectProvider, providerLabel, testConnection, isLlmConfigured } from '../lib/llm'
 import { ensureHostPermission } from '../lib/permissions'
+import { requestCacheClear } from '../lib/cache'
 import type { Settings } from '../lib/types'
 
 export function Options() {
   const [settings, setSettings] = useState<Settings>({})
   const [status, setStatus] = useState<string>('')
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | 'testing' | null>(null)
+  const [cacheStatus, setCacheStatus] = useState<string>('')
 
   useEffect(() => {
     getSettings().then(setSettings)
@@ -35,6 +37,12 @@ export function Options() {
     setTestResult('testing')
     const result = await testConnection(settings)
     setTestResult(result)
+  }
+
+  async function handleClearCache() {
+    await requestCacheClear()
+    setCacheStatus('Cache cleared — any open GitHub tabs will reload and reindex automatically')
+    setTimeout(() => setCacheStatus(''), 4000)
   }
 
   return (
@@ -128,6 +136,24 @@ export function Options() {
           )}
         </section>
       )}
+
+      <section style={{ marginTop: 20 }}>
+        <button
+          onClick={handleClearCache}
+          style={{
+            padding: '6px 14px', fontSize: 13, background: 'none', color: '#666',
+            border: '1px solid #666', borderRadius: 6, cursor: 'pointer',
+          }}
+        >
+          Clear cache
+        </button>
+        <p style={{ color: '#888', fontSize: 12, marginTop: 6 }}>
+          Deletes every indexed repo's cached dependency graph, so the next time you open one it
+          rebuilds from scratch. Shouldn't normally be needed — a new commit already gets a fresh
+          index automatically — but useful if a repo's data ever looks incomplete or wrong.
+        </p>
+        {cacheStatus && <p style={{ color: '#2da44e', fontSize: 12, marginTop: 6 }}>{cacheStatus}</p>}
+      </section>
 
       <section style={{ marginTop: 20 }}>
         <label style={{ display: 'block', fontWeight: 600, marginBottom: 4 }}>Sidebar dock position</label>

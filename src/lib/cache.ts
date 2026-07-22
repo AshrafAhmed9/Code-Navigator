@@ -68,3 +68,45 @@ export async function deleteGraph(key: string): Promise<void> {
   const db = await getDb()
   await db.delete('graphs', key)
 }
+
+export async function clearAllGraphs(): Promise<void> {
+  memCache.clear()
+  const db = await getDb()
+  await db.clear('graphs')
+}
+
+/**
+ * "Clear cache" in Settings can't touch this cache directly — IndexedDB
+ * accessed from a content script is scoped to github.com's origin, not the
+ * extension's own storage, and the options page runs in a completely
+ * different origin (chrome-extension://...) with no access to it. Settings
+ * signals through chrome.storage.local instead (genuinely shared across
+ * every extension context), and each content script clears its own
+ * in-page IndexedDB when it sees the signal. Two keys (requested/handled)
+ * so this works whether a github.com tab is open right now (handled
+ * immediately via onCacheClearRequested) or not (honored on next load).
+ */
+const CLEAR_REQUESTED_KEY = 'cn-clear-cache-requested-at'
+const CLEAR_HANDLED_KEY = 'cn-cache-last-cleared-at'
+
+export async function requestCacheClear(): Promise<void> {
+  await chrome.storage.local.set({ [CLEAR_REQUESTED_KEY]: Date.now() })
+}
+
+/** Called once per content-script load — honors a pending clear exactly once, whenever it actually arrived. */
+export async function honorPendingCacheClear(): Promise<void> {
+  const result = await chrome.storage.local.get([CLEAR_REQUESTED_KEY, CLEAR_HANDLED_KEY])
+  const requestedAt = result[CLEAR_REQUESTED_KEY] as number | undefined
+  const handledAt = result[CLEAR_HANDLED_KEY] as number | undefined
+  if (!requestedAt || (handledAt && handledAt >= requestedAt)) return
+  await clearAllGraphs()
+  await chrome.storage.local.set({ [CLEAR_HANDLED_KEY]: Date.now() })
+}
+
+export function onCacheClearRequested(cb: () => void): () => void {
+  const listener = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
+    if (area === 'local' && CLEAR_REQUESTED_KEY in changes) cb()
+  }
+  chrome.storage.onChanged.addListener(listener)
+  return () => chrome.storage.onChanged.removeListener(listener)
+}

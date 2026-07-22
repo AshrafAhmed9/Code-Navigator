@@ -1,6 +1,7 @@
 import { createRoot, type Root } from 'react-dom/client'
 import { Sidebar } from './Sidebar'
 import { onNavigate } from '../lib/navigation'
+import { honorPendingCacheClear, onCacheClearRequested } from '../lib/cache'
 
 const HOST_ID = 'code-navigator-host'
 let currentRoot: Root | null = null
@@ -62,6 +63,18 @@ function ensureMounted() {
 ensureMounted()
 onNavigate(ensureMounted)
 setInterval(ensureMounted, 1000)
+
+// Honors a "Clear cache" click from Settings — see src/lib/cache.ts for why
+// this goes through chrome.storage.local rather than touching IndexedDB
+// directly. Checked once on load (covers a clear requested before this tab
+// existed) and live via onCacheClearRequested (covers a tab already open
+// when the button is clicked) — a reload after clearing is simplest and
+// matches the existing error-boundary retry's behavior, not worth adding
+// extra state just to avoid it for a rare, deliberate action.
+honorPendingCacheClear()
+onCacheClearRequested(() => {
+  honorPendingCacheClear().then(() => window.location.reload())
+})
 
 // Manual escape hatch: clicking the toolbar icon (background/index.ts) force-
 // remounts the sidebar as an absolute last resort.
