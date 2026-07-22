@@ -1,7 +1,8 @@
 import type { RepoRef, RepoTree, TreeEntry } from './types'
-import { reportRateLimit, isRateLimitExhausted } from './rateLimit'
+import { reportRateLimit, reportRateLimitFromGraphQL, isRateLimitExhausted } from './rateLimit'
 
 const API = 'https://api.github.com'
+const GRAPHQL_API = 'https://api.github.com/graphql'
 
 export class GitHubApiError extends Error {
   status: number
@@ -162,6 +163,100 @@ export async function fetchFileContent(
   const content = await res.text()
   blobCache.set(cacheKey, content)
   return content
+}
+
+function escapeGraphqlString(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+const GRAPHQL_BATCH_SIZE = 80 // conservative margin under GitHub's per-query node/complexity limits
+const GRAPHQL_CONCURRENCY = 4
+
+/** One HTTP request, up to GRAPHQL_BATCH_SIZE files via aliased blob lookups. */
+async function fetchFileBatchGraphQL(
+  ref: Pick<RepoRef, 'owner' | 'repo'>,
+  commitSha: string,
+  paths: string[],
+  pat: string,
+): Promise<Map<string, string>> {
+  const aliases = paths
+    .map((p, i) => `o${i}: object(expression: "${escapeGraphqlString(`${commitSha}:${p}`)}") { ... on Blob { text isBinary } }`)
+    .join('\n      ')
+  const query = `query {
+    repository(owner: "${escapeGraphqlString(ref.owner)}", name: "${escapeGraphqlString(ref.repo)}") {
+      ${aliases}
+    }
+    rateLimit { limit remaining resetAt }
+  }`
+
+  const res = await fetch(GRAPHQL_API, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: `Bearer ${pat}` },
+    body: JSON.stringify({ query }),
+  })
+  if (!res.ok) throw new GitHubApiError(`GitHub GraphQL API ${res.status}`, res.status)
+  const json = await res.json()
+  if (!json.data) throw new GitHubApiError(`GitHub GraphQL error: ${json.errors?.[0]?.message ?? 'no data'}`, 200)
+
+  const rl = json.data.rateLimit
+  if (rl) reportRateLimitFromGraphQL(rl.remaining, rl.limit, rl.resetAt)
+
+  const results = new Map<string, string>()
+  const repository = json.data.repository
+  if (!repository) return results
+  paths.forEach((p, i) => {
+    const blob = repository[`o${i}`]
+    // Absent, not-found, or binary blobs resolve to a missing/null entry here —
+    // same "just skip it" behavior as the REST path's try/catch, not an error.
+    if (blob && !blob.isBinary && typeof blob.text === 'string') results.set(p, blob.text)
+  })
+  return results
+}
+
+/**
+ * Fetches many files' contents via GitHub's GraphQL API, batching up to
+ * GRAPHQL_BATCH_SIZE aliased blob lookups into ONE HTTP request instead of
+ * one REST request per file. This is the actual fix for "indexing large
+ * repos is slow" — the bottleneck was never local parallelism (more workers
+ * don't help once you're bound by request COUNT against a fixed budget, and
+ * pushing REST concurrency higher risks GitHub's separate secondary
+ * abuse-detection limit) — it's that the REST Contents API can only ever
+ * fetch one file per request. Batching turns e.g. 1,500 requests into ~19.
+ *
+ * Requires a token: GitHub's GraphQL API has no unauthenticated tier at all
+ * (unlike REST's 60/hr anonymous access), so this is only used when a PAT is
+ * configured — see buildImportGraph's fallback to fetchManyFiles otherwise.
+ */
+export async function fetchManyFilesGraphQL(
+  ref: Pick<RepoRef, 'owner' | 'repo'>,
+  commitSha: string,
+  paths: string[],
+  pat: string,
+  onProgress?: (done: number, total: number) => void,
+): Promise<Map<string, string>> {
+  const results = new Map<string, string>()
+  const batches: string[][] = []
+  for (let i = 0; i < paths.length; i += GRAPHQL_BATCH_SIZE) batches.push(paths.slice(i, i + GRAPHQL_BATCH_SIZE))
+
+  let done = 0
+  let nextBatch = 0
+  async function worker() {
+    while (nextBatch < batches.length) {
+      const batch = batches[nextBatch++]
+      try {
+        const batchResults = await fetchFileBatchGraphQL(ref, commitSha, batch, pat)
+        for (const [path, content] of batchResults) results.set(path, content)
+      } catch {
+        // Skip this batch rather than aborting the whole index — a partial
+        // graph is far more useful than none (same philosophy as the
+        // per-file REST path below).
+      }
+      done += batch.length
+      onProgress?.(Math.min(done, paths.length), paths.length)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(GRAPHQL_CONCURRENCY, batches.length) }, worker))
+  return results
 }
 
 /** Bounded-concurrency fetch pool so large repos don't blow rate limits or memory. */

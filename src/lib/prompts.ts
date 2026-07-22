@@ -27,6 +27,7 @@ export function buildFilePurposePrompt(
   return {
     system: GROUNDING_SYSTEM,
     prompt: `Explain what this file is responsible for in the codebase, based only on this evidence:\n\n${evidence}`,
+    groundedPaths: [path, ...file.imports, ...file.importedBy],
   }
 }
 
@@ -45,6 +46,7 @@ export function buildWhyIsThisHerePrompt(
   return {
     system: GROUNDING_SYSTEM,
     prompt: `Distinct from "what does this file do" -- explain WHY this file exists as a separate piece of the codebase: what problem its separation solves, and why its listed consumers need it specifically (not just what it does line-by-line). Base this only on the evidence below; if the consumer list is empty or thin, say the evidence doesn't support a confident answer rather than guessing a rationale.\n\n${evidence}`,
+    groundedPaths: [path, ...consumers],
   }
 }
 
@@ -62,6 +64,7 @@ export function buildWhatBreaksPrompt(
   return {
     system: GROUNDING_SYSTEM,
     prompt: `A developer is about to modify ${path}. Based only on the dependent-file list below, explain what parts of the system are likely to break or need review, grouped by area if the file paths suggest natural groupings (e.g. by directory). Do not invent dependents not listed.\n\n${evidence}`,
+    groundedPaths: [path, ...affected],
   }
 }
 
@@ -79,6 +82,7 @@ export function buildWhatToTestPrompt(
   return {
     system: GROUNDING_SYSTEM,
     prompt: `Recommend what to test before merging a change to ${path}, based only on the evidence below. If no test files were found by the import graph, say so plainly and suggest which untested affected files most need coverage, rather than inventing test file names.\n\n${evidence}`,
+    groundedPaths: [path, ...affected, ...tests],
   }
 }
 
@@ -110,6 +114,11 @@ export function buildExplainPrPrompt(
   return {
     system: GROUNDING_SYSTEM,
     prompt: `Summarize this pull request for a reviewer, based only on the evidence below. In 3-5 sentences: (1) what the PR appears to do, inferred from the title/description/changed files, (2) which systems it touches, (3) overall risk, (4) a suggested order to review the files in. Do not invent files, systems, or intent not supported by the evidence.\n\n${evidence}`,
+    groundedPaths: [
+      ...changedFiles.map((f) => f.path),
+      ...reviewOrder,
+      ...affectedSystems.flatMap((s) => s.files.map((f) => f.path)),
+    ],
   }
 }
 
@@ -124,5 +133,6 @@ export function buildFindPrompt(graph: RepoGraph, query: string, candidates: str
   return {
     system: `You rank and explain search results inside a code navigation tool. Only reference files in the provided candidate list -- never invent file paths. Be concise.`,
     prompt: `A developer searched for "${query}" in this repository. Here are the top candidate files ranked by a heuristic (filename/symbol match + how many other files depend on them):\n\n${evidence}\n\nIn 2-3 sentences, say which of these files is most likely the right starting point and why, citing only paths from the list above.`,
+    groundedPaths: candidates,
   }
 }

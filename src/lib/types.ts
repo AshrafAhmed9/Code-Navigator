@@ -49,12 +49,13 @@ export type Language =
  * Also bump this on a pure correctness fix to how `imports`/`importedBy`
  * are computed (not just a shape change) — e.g. v3 -> v4 was import
  * resolution learning to handle Java/Python/Ruby's non-relative in-repo
- * imports; v4 -> v5 added Go module-path resolution via go.mod. The shape
- * didn't change either time, but every previously cached graph's edges were
- * silently wrong/incomplete, and a shape-only version check would have kept
- * serving that stale (structurally valid but wrong) data forever.
+ * imports; v4 -> v5 added Go module-path resolution via go.mod; v5 -> v6
+ * raised the indexed-file cap ~13x for authenticated users (GraphQL batch
+ * fetching). The shape didn't change any of those times, but every
+ * previously cached graph's edges/coverage were silently stale, and a
+ * shape-only version check would have kept serving that forever.
  */
-export const REPO_GRAPH_SCHEMA_VERSION = 5
+export const REPO_GRAPH_SCHEMA_VERSION = 6
 
 export interface RepoGraph {
   schemaVersion: number

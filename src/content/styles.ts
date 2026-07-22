@@ -207,6 +207,14 @@ a.cn-file-row.cn-link:hover { color: var(--cn-accent); }
   background: var(--cn-accent-soft); color: #6cb6ff; font-weight: 600; text-transform: none;
   letter-spacing: 0; font-size: 10px; padding: 3px 9px; border-radius: 8px;
 }
+.cn-badge-warning {
+  background: var(--cn-danger-soft); color: var(--cn-danger); font-weight: 600; text-transform: none;
+  letter-spacing: 0; font-size: 10px; padding: 3px 9px; border-radius: 8px;
+}
+.cn-grounding-warning {
+  margin-top: 8px; padding: 9px 11px; background: var(--cn-danger-soft); color: var(--cn-danger);
+  font-size: 11.5px; line-height: 1.55; border-radius: 10px;
+}
 .cn-purpose-text { font-size: 13px; line-height: 1.65; color: var(--cn-text); }
 .cn-cursor { animation: cn-blink 1s step-start infinite; color: var(--cn-accent); }
 @keyframes cn-blink { 50% { opacity: 0; } }

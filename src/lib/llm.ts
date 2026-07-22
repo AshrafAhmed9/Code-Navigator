@@ -52,6 +52,14 @@ export function providerLabel(id: LlmProviderId): string {
 export interface LlmRequest {
   system: string
   prompt: string
+  /**
+   * Every file path the model was actually given as evidence for this
+   * request — used to catch the rare hallucinated file reference after the
+   * fact (see src/lib/grounding.ts). A grounded system prompt makes this
+   * rare, not impossible; this is the verification layer on top of asking
+   * nicely, not a replacement for it.
+   */
+  groundedPaths: string[]
 }
 
 export function isLlmConfigured(settings: Settings): boolean {

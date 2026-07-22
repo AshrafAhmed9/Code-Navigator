@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { getSettings } from '../lib/settings'
 import { isLlmConfigured, streamCompletion } from '../lib/llm'
 import type { LlmRequest } from '../lib/llm'
+import { findUngroundedPaths } from '../lib/grounding'
 import { openOptionsPage } from '../lib/openOptions'
 
 type State =
   | { kind: 'unconfigured' }
   | { kind: 'loading' }
   | { kind: 'streaming'; text: string }
-  | { kind: 'done'; text: string }
+  | { kind: 'done'; text: string; ungroundedPaths: string[] }
   | { kind: 'error'; message: string }
 
 export function NarrativePanel({
@@ -42,7 +43,9 @@ export function NarrativePanel({
           acc += delta
           setState({ kind: 'streaming', text: acc })
         }
-        if (!cancelledRef.current) setState({ kind: 'done', text: acc })
+        if (!cancelledRef.current) {
+          setState({ kind: 'done', text: acc, ungroundedPaths: findUngroundedPaths(acc, req.groundedPaths) })
+        }
       } catch (e) {
         if (!cancelledRef.current) {
           setState({ kind: 'error', message: e instanceof Error ? e.message : String(e) })
@@ -71,17 +74,26 @@ export function NarrativePanel({
     )
   }
 
+  const flagged = state.kind === 'done' && state.ungroundedPaths.length > 0
+
   return (
     <div className="cn-section">
       <div className="cn-label">
         {label}
-        {state.kind !== 'error' && <span className="cn-badge cn-badge-inferred">LLM-inferred</span>}
+        {state.kind !== 'error' && !flagged && <span className="cn-badge cn-badge-inferred">LLM-inferred</span>}
+        {flagged && <span className="cn-badge cn-badge-warning">⚠ unverified reference</span>}
       </div>
       {state.kind === 'loading' && <div className="cn-muted">Thinking…</div>}
       {(state.kind === 'streaming' || state.kind === 'done') && (
         <div className="cn-purpose-text">
           {state.text || '…'}
           {state.kind === 'streaming' && <span className="cn-cursor">▍</span>}
+        </div>
+      )}
+      {flagged && state.kind === 'done' && (
+        <div className="cn-grounding-warning">
+          Mentions {state.ungroundedPaths.length === 1 ? 'a file path' : 'file paths'} not found in the
+          evidence this was grounded in — {state.ungroundedPaths.join(', ')}. Verify before trusting this claim.
         </div>
       )}
       {state.kind === 'error' && <div className="cn-error">{state.message}</div>}

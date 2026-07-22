@@ -59,9 +59,50 @@ export interface ImportIndex {
   byFilename: Map<string, string[]>
   /** Present only when a root go.mod was found — see resolveGoImport. */
   go?: { modulePath: string; byDir: Map<string, string[]> }
+  /** Present only when a root tsconfig.json/jsconfig.json declared path aliases or a baseUrl — see resolveTsPathAlias. */
+  tsPaths?: TsPathConfig
 }
 
-export function buildImportIndex(paths: string[], goModulePath?: string | null): ImportIndex {
+export interface TsPathConfig {
+  /** Repo-relative directory paths resolve against; '' means the repo root. */
+  baseUrl: string
+  /** tsconfig `compilerOptions.paths` — pattern (may contain one '*') -> candidate targets, each relative to baseUrl. */
+  paths: Record<string, string[]>
+}
+
+/**
+ * Lenient tsconfig.json/jsconfig.json parser — these commonly contain `//`
+ * and `/* *‍/` comments and trailing commas, which plain JSON.parse rejects.
+ * Not a full JSONC parser (a `//` inside a string literal would be wrongly
+ * stripped), but tsconfig files are simple enough in practice that this is a
+ * reasonable trade rather than pulling in a real JSONC parser for one file.
+ */
+function parseJsonc(text: string): any | null {
+  const stripped = text
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:"])\/\/.*$/gm, '$1')
+    .replace(/,(\s*[}\]])/g, '$1')
+  try {
+    return JSON.parse(stripped)
+  } catch {
+    return null
+  }
+}
+
+export interface ParsedTsConfig {
+  baseUrl?: string
+  paths?: Record<string, string[]>
+  extends?: string
+}
+
+export function parseTsConfig(text: string): ParsedTsConfig | null {
+  const json = parseJsonc(text)
+  if (!json || typeof json !== 'object') return null
+  const co = json.compilerOptions ?? {}
+  return { baseUrl: typeof co.baseUrl === 'string' ? co.baseUrl : undefined, paths: co.paths, extends: json.extends }
+}
+
+export function buildImportIndex(paths: string[], goModulePath?: string | null, tsPaths?: TsPathConfig | null): ImportIndex {
   const byFilename = new Map<string, string[]>()
   for (const p of paths) {
     const name = p.slice(p.lastIndexOf('/') + 1)
@@ -84,7 +125,7 @@ export function buildImportIndex(paths: string[], goModulePath?: string | null):
     go = { modulePath: goModulePath, byDir }
   }
 
-  return { allPaths: new Set(paths), byFilename, go }
+  return { allPaths: new Set(paths), byFilename, go, tsPaths: tsPaths ?? undefined }
 }
 
 /**
@@ -116,29 +157,65 @@ function resolveBySuffix(suffix: string, index: ImportIndex): string | null {
   return matches.length === 1 ? matches[0] : null
 }
 
-/** JS/TS-style relative resolution: specifier is a slash-separated path relative to fromPath's directory. */
-function resolveJsRelative(fromPath: string, specifier: string, allPaths: Set<string>): string | null {
-  const fromDir = fromPath.split('/').slice(0, -1)
-  const parts = specifier.split('/')
-  const stack = [...fromDir]
-  for (const part of parts) {
+/** Joins path segments (from a base directory plus a relative/dotted continuation), resolving '.'/'..'. */
+function joinPathSegments(base: string[], rel: string[]): string {
+  const stack = [...base]
+  for (const part of rel) {
     if (part === '.' || part === '') continue
     if (part === '..') stack.pop()
     else stack.push(part)
   }
-  const base = stack.join('/')
-  const candidates = [
-    base,
-    `${base}.ts`,
-    `${base}.tsx`,
-    `${base}.js`,
-    `${base}.jsx`,
-    `${base}/index.ts`,
-    `${base}/index.tsx`,
-    `${base}/index.js`,
-    `${base}/index.jsx`,
-  ]
-  for (const c of candidates) if (allPaths.has(c)) return c
+  return stack.join('/')
+}
+
+const JS_CANDIDATE_SUFFIXES = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx']
+
+function tryJsCandidates(base: string, allPaths: Set<string>): string | null {
+  for (const suffix of JS_CANDIDATE_SUFFIXES) if (allPaths.has(base + suffix)) return base + suffix
+  return null
+}
+
+/** JS/TS-style relative resolution: specifier is a slash-separated path relative to fromPath's directory. */
+function resolveJsRelative(fromPath: string, specifier: string, allPaths: Set<string>): string | null {
+  const base = joinPathSegments(fromPath.split('/').slice(0, -1), specifier.split('/'))
+  return tryJsCandidates(base, allPaths)
+}
+
+/**
+ * tsconfig/jsconfig `compilerOptions.paths` maps an alias pattern (e.g.
+ * `"@/*"`) to one or more repo-relative targets (e.g. `["src/*"]`), each
+ * resolved against `baseUrl`. A bare `baseUrl` alone (no matching pattern)
+ * also makes otherwise-bare specifiers resolve relative to it — both are
+ * absolute from the repo, unlike resolveJsRelative's fromPath-relative walk.
+ */
+export function resolveTsPathAlias(specifier: string, config: TsPathConfig, allPaths: Set<string>): string | null {
+  // joinPathSegments (not a plain split) so a literal "." baseUrl — the
+  // conventional "repo root" value — normalizes away instead of leaking a
+  // stray "." path segment that would never match a real path.
+  const baseSegments = joinPathSegments([], (config.baseUrl || '').split('/')).split('/').filter(Boolean)
+  const candidateBases: string[] = []
+
+  for (const [pattern, targets] of Object.entries(config.paths)) {
+    const star = pattern.indexOf('*')
+    if (star === -1) {
+      if (pattern === specifier) for (const t of targets) candidateBases.push(joinPathSegments(baseSegments, t.split('/')))
+      continue
+    }
+    const prefix = pattern.slice(0, star)
+    const suffix = pattern.slice(star + 1)
+    if (!specifier.startsWith(prefix) || !specifier.endsWith(suffix) || specifier.length < prefix.length + suffix.length) continue
+    const matched = specifier.slice(prefix.length, specifier.length - suffix.length)
+    for (const t of targets) candidateBases.push(joinPathSegments(baseSegments, t.replace('*', matched).split('/')))
+  }
+
+  if (candidateBases.length === 0 && config.baseUrl) {
+    candidateBases.push(joinPathSegments(baseSegments, specifier.split('/')))
+  }
+
+  for (const base of candidateBases) {
+    const hit = tryJsCandidates(base, allPaths)
+    if (hit) return hit
+  }
   return null
 }
 
@@ -252,6 +329,13 @@ export function resolveImportPath(
     }
     return null // external crate or std/core — not in this repo
   }
+  // Bare TS/JS specifiers are usually a real external package (npm), but a
+  // configured path alias (e.g. "@/components/Foo") or baseUrl-relative
+  // import is a real in-repo edge that was previously indistinguishable from
+  // one — silently dropping it understated a file's true impact whenever a
+  // project used aliases, which is extremely common (Next.js, most
+  // TS monorepos). Only attempted when a root tsconfig/jsconfig was found.
+  if (index.tsPaths) return resolveTsPathAlias(specifier, index.tsPaths, index.allPaths)
   return null // external package (JS/TS)
 }
 

@@ -106,7 +106,13 @@ Your GitHub token and LLM key never leave your browser. See
 - **Grounded LLM narratives** (labeled "LLM-inferred," streamed live):
   **Purpose**, **Why is this here?** (distinct from Purpose — the *reason*
   this file is separate, not what it does), **What breaks if I change
-  this?**, **What should I test?**.
+  this?**, **What should I test?**. Each narrative is checked after the fact
+  against the exact evidence it was given — if it cites a file path that
+  wasn't part of that evidence, the badge switches to a visible "⚠ unverified
+  reference" instead of presenting it with the same confidence as a grounded
+  claim (`src/lib/grounding.ts`). A system prompt makes hallucination rare;
+  it doesn't make it impossible, so this is a real check, not just an
+  instruction.
 
 ### Reviewing a PR
 - **PR review mode** — open any `github.com/owner/repo/pull/N` and the
@@ -149,13 +155,23 @@ Your GitHub token and LLM key never leave your browser. See
 - **Criticality is lazy and cached** (one call, on click) — deliberately not
   a repo-wide history crawl, which would burn the budget fast on a large
   repo.
-- **Very large repos are bounded, not throttled to a crawl.** Past 1,500 code
-  files, indexing prioritizes a subset (entry-point-shaped files, then
-  shallower paths first) instead of trying to fetch every file — no realistic
-  concurrency finishes tens of thousands of individual file requests in
-  reasonable time, and pushing concurrency higher risks tripping GitHub's
-  secondary abuse-detection limit regardless of the primary budget. The Map
-  view says plainly when this happened and how many files were covered.
+- **Indexing goes through GitHub's GraphQL API when a token is configured**
+  (`fetchManyFilesGraphQL` in `src/lib/github.ts`), batching ~80 file lookups
+  into a single HTTP request via aliased queries instead of one REST request
+  per file. Request count — not local concurrency — was always the real
+  bottleneck for indexing large repos (pushing concurrency higher just risks
+  GitHub's separate secondary abuse-detection limit); this cuts the request
+  count for a 1,500-file repo from ~1,500 to ~19. Falls back to the REST
+  concurrent pool if GraphQL comes back empty (e.g. a token scoped without
+  GraphQL access). No token means no GraphQL at all (it has no anonymous
+  tier), so the unauthenticated path still fetches one file per REST request.
+- **The indexed-file cap reflects that.** 20,000 files with a token (a
+  20,000-file repo is now ~250 GraphQL requests, not 20,000 — most real
+  repos, including very large ones, are indexed in full), 1,500 without one.
+  Past the cap, indexing prioritizes a subset (entry-point-shaped files, then
+  shallower paths first) rather than trying to fetch everything regardless of
+  cost. The Map view says plainly when this happened and how many files were
+  covered.
 
 ---
 
@@ -165,10 +181,19 @@ Your GitHub token and LLM key never leave your browser. See
 No backend means: no hosting bill, nothing to keep online, and your GitHub
 token / LLM key never leave your browser except to their own providers
 (`api.github.com`, `raw.githubusercontent.com`, `api.anthropic.com`,
-`api.openai.com` — each explicitly declared in `manifest.config.ts`'s
-`host_permissions`, which MV3 content scripts require for any cross-origin
-fetch to succeed at all). The tradeoff: a browser tab can't parse thousands
-of files upfront, so the design leans on:
+`api.openai.com`, `api.groq.com`, `generativelanguage.googleapis.com` — each
+explicitly declared in `manifest.config.ts`'s `host_permissions`, which MV3
+content scripts require for any cross-origin fetch to succeed at all; a
+custom OpenAI-compatible endpoint requests its own permission at runtime,
+scoped to just that host — see [Settings](#settings)). There's also
+deliberately no distributed backend of any kind (job queue, message broker) —
+this is one browser tab making HTTP calls to GitHub's REST/GraphQL API, not a
+distributed system with independent producers/consumers to decouple. The
+actual bottleneck for indexing speed was never local parallelism, it's
+request COUNT against GitHub's rate limit; see point 3 below (GraphQL
+batching) for the fix that actually addresses that. The tradeoff of no
+backend at all: a browser tab can't parse thousands of files upfront on its
+own compute, so the design leans on:
 
 1. **Import-graph first, not full ASTs** for the whole repo (`src/lib/importExtract.ts`,
    regex-based) — cheap, works across languages without per-language
@@ -182,18 +207,23 @@ of files upfront, so the design leans on:
    in `go.mod`; Rust resolves `crate::`/`self::`/`super::` paths, including
    the case where the last path segment is an imported item rather than a
    file. External packages (npm, PyPI, Go/Rust stdlib, other modules) are
-   correctly left unresolved in every case, not guessed.
+   correctly left unresolved in every case, not guessed. TS/JS bare
+   specifiers also resolve against a root `tsconfig.json`/`jsconfig.json`'s
+   `paths`/`baseUrl` when one exists (following one `extends` hop) — a path
+   alias like `@/components/Foo` is a real in-repo edge, not an external
+   package, and treating it as one (the previous behavior) understated a
+   file's true impact on any project using aliases, which is most modern
+   TS/Next.js codebases.
 2. **Everything cached by commit SHA** (`src/lib/cache.ts`) — reopening a
    repo/file is instant; a new commit invalidates cleanly. The cache is also
    schema-versioned (`REPO_GRAPH_SCHEMA_VERSION` in `src/lib/types.ts`): a
    graph cached under an older shape is discarded and rebuilt rather than
    handed to current code as-is, which used to be able to crash on a missing
    field.
-3. **Bounded, batched fetching** (`src/lib/github.ts`) — concurrency-pooled
-   (24 in flight with a token, 12 without — each path has its own separate
-   rate-limit budget), Contents API or raw.githubusercontent.com depending on
-   whether a token is set, capped at 1,500 indexed files on very large repos
-   (see [API budget](#api-budget)).
+3. **Bounded, batched fetching** (`src/lib/github.ts`) — GraphQL-batched
+   (~80 files/request) with a token, one-REST-request-per-file without one;
+   capped at 20,000 (with a token) or 1,500 (without) indexed files on very
+   large repos (see [API budget](#api-budget)).
 
 ### Reliability
 The sidebar is expected to show up on every repo, every time — a few specific
@@ -234,7 +264,12 @@ failure modes are guarded against directly rather than hoped around:
 Every claim (impact counts, "what breaks," search rankings) is **grounded in
 the deterministic import graph first**; the LLM only narrates or ranks on
 top of that evidence, never as the sole source of truth. A wrong-but-fast
-answer is a bug, not a feature.
+answer is a bug, not a feature. This isn't just a prompt instruction — every
+LLM narrative is checked after the fact against the exact evidence it was
+given (`src/lib/grounding.ts`), and flagged visibly if it cites something
+that wasn't part of that evidence, rather than presented with the same
+confidence as a verified claim. A grounded prompt makes hallucination rare;
+only a verification step catches the rare case where it happens anyway.
 
 ### Source layout
 ```

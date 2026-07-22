@@ -1,8 +1,59 @@
 import type { RepoRef, RepoTree, RepoGraph, FileNode } from './types'
 import { REPO_GRAPH_SCHEMA_VERSION } from './types'
 import { detectLanguage, isVendoredOrGenerated, isLikelyTestFile, CODE_EXTENSIONS } from './language'
-import { extractImportSpecifiers, resolveImportPath, buildImportIndex, extractExportedSymbols } from './importExtract'
-import { fetchManyFiles, fetchFileContent } from './github'
+import {
+  extractImportSpecifiers,
+  resolveImportPath,
+  buildImportIndex,
+  extractExportedSymbols,
+  parseTsConfig,
+  type TsPathConfig,
+} from './importExtract'
+import { fetchManyFiles, fetchManyFilesGraphQL, fetchFileContent } from './github'
+
+/**
+ * Reads the root tsconfig.json (or jsconfig.json), following one `extends`
+ * hop for the common monorepo pattern of a package config extending a shared
+ * base config — a real path-alias config split across two files is still
+ * usable, not silently ignored. Only ever looks at the repo root; a config
+ * that lives elsewhere (e.g. a workspace member's own tsconfig with its own
+ * aliases) isn't found, same limitation as go.mod's root-only lookup.
+ */
+async function loadTsPathConfig(
+  ref: Pick<RepoRef, 'owner' | 'repo'>,
+  commitSha: string,
+  pat: string | undefined,
+  codePaths: string[],
+): Promise<TsPathConfig | null> {
+  if (!codePaths.some((p) => /\.(ts|tsx|js|jsx)$/.test(p))) return null
+
+  for (const filename of ['tsconfig.json', 'jsconfig.json']) {
+    let text: string
+    try {
+      text = await fetchFileContent(ref, commitSha, filename, pat)
+    } catch {
+      continue // try the next filename
+    }
+
+    let parsed = parseTsConfig(text)
+    if (!parsed) continue
+
+    if (parsed.baseUrl === undefined && !parsed.paths && parsed.extends?.startsWith('.')) {
+      try {
+        const extPath = parsed.extends.replace(/^\.\//, '').replace(/\.json$/, '') + '.json'
+        const extText = await fetchFileContent(ref, commitSha, extPath, pat)
+        parsed = parseTsConfig(extText) ?? parsed
+      } catch {
+        // extended config not found/fetchable — fall through with whatever the base config had (likely nothing)
+      }
+    }
+
+    if (parsed.baseUrl !== undefined || (parsed.paths && Object.keys(parsed.paths).length > 0)) {
+      return { baseUrl: parsed.baseUrl ?? '', paths: parsed.paths ?? {} }
+    }
+  }
+  return null
+}
 
 /**
  * A graph with the full file tree (allPaths) but no import/content data yet —
@@ -27,16 +78,18 @@ export function buildSkeletonGraph(ref: Pick<RepoRef, 'owner' | 'repo'>, commitS
 }
 
 /**
- * Fetching and parsing every code file is one HTTP round-trip each — on a
- * repo with tens of thousands of files, no realistic concurrency finishes in
- * a reasonable time, and pushing concurrency higher risks tripping GitHub's
- * secondary (abuse-detection) rate limit regardless of the primary budget.
- * Past this many code files, indexing is bounded to a prioritized subset
- * instead of "eventually, everything" — reliability means a predictable
- * finish time on any repo size, not a technically-complete graph that never
- * arrives.
+ * With a token, indexing goes through GitHub's GraphQL API (fetchManyFilesGraphQL),
+ * which batches ~80 files into a single HTTP request — the request-count
+ * bottleneck that justified a low cap essentially disappears (a 20,000-file
+ * repo is ~250 requests, not 20,000), so the cap can be raised by more than
+ * an order of magnitude. Without a token, GraphQL isn't available at all
+ * (no anonymous tier) and indexing falls back to one REST request per file,
+ * where the original, tighter cap still applies — that path is both more
+ * request-expensive AND more exposed to GitHub's secondary abuse-detection
+ * limit under high concurrency.
  */
-const MAX_INDEXED_FILES = 1500
+const MAX_INDEXED_FILES_WITH_TOKEN = 20000
+const MAX_INDEXED_FILES_WITHOUT_TOKEN = 1500
 
 /** Entry-point-shaped files first, then shallower paths — a cheap proxy for "more central" before any real graph data exists yet. */
 function prioritizeForIndexing(paths: string[]): string[] {
@@ -69,9 +122,10 @@ export async function buildImportGraph(
     .filter((p) => !isVendoredOrGenerated(p))
     .filter((p) => CODE_EXTENSIONS.has(p.split('.').pop()?.toLowerCase() ?? ''))
 
+  const maxIndexedFiles = pat ? MAX_INDEXED_FILES_WITH_TOKEN : MAX_INDEXED_FILES_WITHOUT_TOKEN
   const totalCodeFileCount = codePaths.length
-  const pathsToFetch = totalCodeFileCount > MAX_INDEXED_FILES
-    ? prioritizeForIndexing(codePaths).slice(0, MAX_INDEXED_FILES)
+  const pathsToFetch = totalCodeFileCount > maxIndexedFiles
+    ? prioritizeForIndexing(codePaths).slice(0, maxIndexedFiles)
     : codePaths
   const fetchSet = new Set(pathsToFetch)
 
@@ -91,18 +145,35 @@ export async function buildImportGraph(
     }
   }
 
+  // Path aliases (tsconfig/jsconfig "@/..." style) are real in-repo imports
+  // that would otherwise be indistinguishable from an external npm package —
+  // see loadTsPathConfig and resolveTsPathAlias.
+  const tsPathConfig = await loadTsPathConfig(ref, commitSha, pat, codePaths)
+
   // Every code path counts as a valid import-resolution target, even the ones
   // whose own content isn't being fetched this pass — otherwise a fetched
   // file that imports a skipped one would silently lose that edge instead of
   // just not knowing the skipped file's own imports.
-  const importIndex = buildImportIndex(codePaths, goModulePath)
-  // Each file is its own HTTP round-trip, so concurrency — not bandwidth — is
-  // what dominates wall-clock time on large repos. A PAT'd request uses the
-  // authenticated Contents API (5,000/hr budget), so it can run noticeably
-  // more parallel fetches than the unauthenticated raw.githubusercontent.com
-  // path without either one starving the other's separate rate limit.
-  const concurrency = pat ? 24 : 12
-  const contents = await fetchManyFiles(ref, commitSha, pathsToFetch, pat, concurrency, onProgress)
+  const importIndex = buildImportIndex(codePaths, goModulePath, tsPathConfig)
+  // GraphQL batching (~80 files/request) is the primary path whenever a token
+  // is available — it's both dramatically faster (request count, not
+  // concurrency, was always the real bottleneck) and lighter on the rate
+  // limit than fetching one file per REST request. Falls back to the REST
+  // concurrent pool if GraphQL comes back completely empty (e.g. a token
+  // scoped without GraphQL access, or an org that disabled it) — a partial
+  // graph from a fallback beats no graph at all.
+  let contents: Map<string, string>
+  if (pat) {
+    contents = await fetchManyFilesGraphQL(ref, commitSha, pathsToFetch, pat, onProgress)
+    if (contents.size === 0 && pathsToFetch.length > 0) {
+      contents = await fetchManyFiles(ref, commitSha, pathsToFetch, pat, 24, onProgress)
+    }
+  } else {
+    // No token means no GraphQL access at all (GitHub's GraphQL API has no
+    // anonymous tier) — one REST request per file, at a lower concurrency to
+    // stay further under the unauthenticated budget and abuse-detection limit.
+    contents = await fetchManyFiles(ref, commitSha, pathsToFetch, pat, 12, onProgress)
+  }
 
   const files: Record<string, FileNode> = {}
   const languageBreakdown: Record<string, number> = {}

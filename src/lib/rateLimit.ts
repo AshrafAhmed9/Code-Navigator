@@ -17,7 +17,7 @@ export function onRateLimitChange(cb: (s: RateLimitState) => void): () => void {
   return () => listeners.delete(cb)
 }
 
-/** Called after every GitHub API response so the sidebar can show a live budget and degrade gracefully. */
+/** Called after every GitHub REST response so the sidebar can show a live budget and degrade gracefully. */
 export function reportRateLimit(headers: Headers, authenticated: boolean): void {
   const remaining = headers.get('x-ratelimit-remaining')
   if (remaining === null) return // raw.githubusercontent.com and some responses don't carry these
@@ -29,6 +29,18 @@ export function reportRateLimit(headers: Headers, authenticated: boolean): void 
     resetAt: reset ? Number(reset) * 1000 : state.resetAt,
     authenticated,
   }
+  for (const l of listeners) l(state)
+}
+
+/**
+ * GraphQL exposes its own budget via a `rateLimit { ... }` field in the
+ * response body instead of response headers — this is a SEPARATE 5,000
+ * points/hr budget from the REST budget above, tracked here with the same
+ * shared state since the sidebar only ever needs to show "how much runway is
+ * left," not which API family it came from.
+ */
+export function reportRateLimitFromGraphQL(remaining: number, limit: number, resetAtIso: string): void {
+  state = { remaining, limit, resetAt: new Date(resetAtIso).getTime(), authenticated: true }
   for (const l of listeners) l(state)
 }
 
