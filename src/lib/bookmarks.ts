@@ -28,14 +28,6 @@ function enqueue<T>(op: () => Promise<T>): Promise<T> {
   return next
 }
 
-export function addBookmark(bookmark: Bookmark): Promise<void> {
-  return enqueue(async () => {
-    const marks = await getBookmarks()
-    if (marks.some((b) => b.url === bookmark.url)) return
-    await chrome.storage.local.set({ [STORAGE_KEY]: [bookmark, ...marks] })
-  })
-}
-
 export function removeBookmark(url: string): Promise<void> {
   return enqueue(async () => {
     const marks = await getBookmarks()
