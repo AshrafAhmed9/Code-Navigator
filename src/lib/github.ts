@@ -169,17 +169,26 @@ function escapeGraphqlString(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
-// Once request COUNT stopped being the bottleneck (that's what batching
-// itself fixed), the remaining constraint is round-trip latency × number of
-// sequential rounds (batches ÷ concurrency) — so both knobs matter. GraphQL's
-// rate-limit budget has enormous headroom here (a batch this size costs ~1 of
-// the 5,000 points/hr), so it's not the limiting factor; the real ceiling is
-// GitHub's per-query node/complexity limit (undocumented exact number, hence
-// "conservative margin" rather than pushed to the edge) and, at high
-// concurrency, the same secondary abuse-detection risk as REST. These are
-// deliberately a moderate step up, not the theoretical max.
-const GRAPHQL_BATCH_SIZE = 100
-const GRAPHQL_CONCURRENCY = 6
+// Progress only advances once a whole batch's ONE HTTP request completes —
+// with a 100-file batch, that request's duration varies a lot depending on
+// which files happen to land in it (a batch with a few large files takes far
+// longer than one of small files), so the progress bar visibly bursts
+// forward then stalls waiting on whichever in-flight batch is slowest, then
+// bursts again. That "choppy" pattern is a genuine UX regression from the
+// old one-request-per-file approach, which updated far more often with far
+// smaller, more consistent steps — even though it was much slower overall.
+// Smaller batches (each representing less work, so a slow one stalls
+// progress for less time) plus more of them in flight at once (so
+// completions overlap and interleave instead of clumping) directly targets
+// that smoothness, independent of GraphQL's request-count win, which stays
+// intact either way (still ~40 requests for a 20,000-file repo, not 20,000).
+// GraphQL's rate-limit budget has enormous headroom here (a batch this size
+// costs ~1 of the 5,000 points/hr) — the real ceiling is GitHub's per-query
+// node/complexity limit (undocumented exact number, hence "conservative
+// margin") and, at high concurrency, the same secondary abuse-detection risk
+// as REST — so this stays a moderate step, not the theoretical max.
+const GRAPHQL_BATCH_SIZE = 50
+const GRAPHQL_CONCURRENCY = 10
 
 /** One HTTP request, up to GRAPHQL_BATCH_SIZE files via aliased blob lookups. */
 async function fetchFileBatchGraphQL(

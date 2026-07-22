@@ -156,17 +156,28 @@ Your GitHub token and LLM key never leave your browser. See
   a repo-wide history crawl, which would burn the budget fast on a large
   repo.
 - **Indexing goes through GitHub's GraphQL API when a token is configured**
-  (`fetchManyFilesGraphQL` in `src/lib/github.ts`), batching ~80 file lookups
+  (`fetchManyFilesGraphQL` in `src/lib/github.ts`), batching 50 file lookups
   into a single HTTP request via aliased queries instead of one REST request
   per file. Request count — not local concurrency — was always the real
   bottleneck for indexing large repos (pushing concurrency higher just risks
   GitHub's separate secondary abuse-detection limit); this cuts the request
-  count for a 1,500-file repo from ~1,500 to ~19. Falls back to the REST
-  concurrent pool if GraphQL comes back empty (e.g. a token scoped without
-  GraphQL access). No token means no GraphQL at all (it has no anonymous
-  tier), so the unauthenticated path still fetches one file per REST request.
+  count for a 1,500-file repo from ~1,500 to ~30. A batch that fails outright
+  (transient error, not a legitimate "file not found") is retried once via
+  REST. Falls back to the REST concurrent pool entirely if GraphQL comes back
+  empty (e.g. a token scoped without GraphQL access). No token means no
+  GraphQL at all (it has no anonymous tier), so the unauthenticated path
+  still fetches one file per REST request.
+  The batch size is deliberately smaller than GitHub's own limits likely
+  allow: progress only advances once a batch's single HTTP request
+  completes, and a bigger batch means a slower, choppier "long pause, then a
+  big jump" progress bar (its duration varies with whichever files happen to
+  land in it) rather than a smooth, frequent one — smoothness was worth more
+  here than the small extra speed a larger batch would buy. GitHub also
+  doesn't publish the exact per-query complexity ceiling for aliased batch
+  requests, so batch size (50) and concurrency (10 parallel batches) stay a
+  moderate, deliberate choice rather than pushed to an unverified edge.
 - **The indexed-file cap reflects that.** 20,000 files with a token (a
-  20,000-file repo is now ~250 GraphQL requests, not 20,000 — most real
+  20,000-file repo is now ~400 GraphQL requests, not 20,000 — most real
   repos, including very large ones, are indexed in full), 1,500 without one.
   Past the cap, indexing prioritizes a subset (entry-point-shaped files, then
   shallower paths first) rather than trying to fetch everything regardless of

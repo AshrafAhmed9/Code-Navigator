@@ -541,6 +541,22 @@ function RepoMapView({
   const capped = graph.totalCodeFileCount > graph.indexedFileCount
   const systems = useMemo(() => detectCoreSystems(graph), [graph])
 
+  if (totalFiles === 0) {
+    return (
+      <div>
+        <h3 className="cn-h3">Understand this repository</h3>
+        <div className="cn-stat">0 files indexed</div>
+        <div className="cn-muted" style={{ marginTop: 8 }}>
+          No dependency graph could be built for this repo. Either it's in a language
+          Code Navigator doesn't support yet (supported: JavaScript, TypeScript, Python,
+          Go, Java, Ruby, Rust), or it has no in-repo code files to index. The file tree
+          and search still work regardless — only the dependency graph, impact analysis,
+          and flow diagrams need this.
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       <h3 className="cn-h3">Understand this repository</h3>
