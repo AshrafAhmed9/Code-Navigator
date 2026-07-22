@@ -6,7 +6,7 @@ export default defineManifest({
   name: 'Code Navigator — Understand any repo in 15 minutes',
   version: pkg.version,
   description:
-    'Navigate, understand, and safely change any GitHub repo. Dependency graphs, impact analysis, and architecture tours — right inside github.com.',
+    'Understand any GitHub repo in 15 minutes. Dependency graphs, impact analysis, and PR summaries — client-side, bring your own key.',
   icons: {
     16: 'public/icon16.png',
     48: 'public/icon48.png',
