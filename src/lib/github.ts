@@ -169,8 +169,17 @@ function escapeGraphqlString(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
-const GRAPHQL_BATCH_SIZE = 80 // conservative margin under GitHub's per-query node/complexity limits
-const GRAPHQL_CONCURRENCY = 4
+// Once request COUNT stopped being the bottleneck (that's what batching
+// itself fixed), the remaining constraint is round-trip latency × number of
+// sequential rounds (batches ÷ concurrency) — so both knobs matter. GraphQL's
+// rate-limit budget has enormous headroom here (a batch this size costs ~1 of
+// the 5,000 points/hr), so it's not the limiting factor; the real ceiling is
+// GitHub's per-query node/complexity limit (undocumented exact number, hence
+// "conservative margin" rather than pushed to the edge) and, at high
+// concurrency, the same secondary abuse-detection risk as REST. These are
+// deliberately a moderate step up, not the theoretical max.
+const GRAPHQL_BATCH_SIZE = 100
+const GRAPHQL_CONCURRENCY = 6
 
 /** One HTTP request, up to GRAPHQL_BATCH_SIZE files via aliased blob lookups. */
 async function fetchFileBatchGraphQL(
@@ -238,6 +247,13 @@ export async function fetchManyFilesGraphQL(
   const batches: string[][] = []
   for (let i = 0; i < paths.length; i += GRAPHQL_BATCH_SIZE) batches.push(paths.slice(i, i + GRAPHQL_BATCH_SIZE))
 
+  // Paths whose batch outright failed (network blip, transient GraphQL error)
+  // — distinct from a path that resolved successfully to "no blob" (genuinely
+  // missing/binary/too large), which is a real answer, not a failure, and
+  // retrying it wouldn't change anything. Only the former is worth a REST
+  // retry below.
+  const failedPaths: string[] = []
+
   let done = 0
   let nextBatch = 0
   async function worker() {
@@ -247,15 +263,27 @@ export async function fetchManyFilesGraphQL(
         const batchResults = await fetchFileBatchGraphQL(ref, commitSha, batch, pat)
         for (const [path, content] of batchResults) results.set(path, content)
       } catch {
-        // Skip this batch rather than aborting the whole index — a partial
-        // graph is far more useful than none (same philosophy as the
-        // per-file REST path below).
+        failedPaths.push(...batch)
       }
       done += batch.length
       onProgress?.(Math.min(done, paths.length), paths.length)
     }
   }
   await Promise.all(Array.from({ length: Math.min(GRAPHQL_CONCURRENCY, batches.length) }, worker))
+
+  // A whole batch fails only on a genuine transient error (a real "not found"
+  // resolves per-file within a successful batch, handled above) — worth one
+  // REST retry so a single network blip doesn't cost real files. Bounded to a
+  // small fraction of the total so a systemic GraphQL failure (token scoped
+  // without GraphQL access, endpoint down) doesn't silently turn into a slow
+  // one-request-per-file fallback for the WHOLE repo — buildImportGraph
+  // already handles that case by falling back entirely when nothing comes
+  // back at all.
+  if (failedPaths.length > 0 && failedPaths.length <= Math.max(50, paths.length * 0.1)) {
+    const retried = await fetchManyFiles(ref, commitSha, failedPaths, pat, 12)
+    for (const [path, content] of retried) results.set(path, content)
+  }
+
   return results
 }
 

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { getSettings, saveSettings } from '../lib/settings'
-import { detectProvider, providerLabel } from '../lib/llm'
+import { detectProvider, providerLabel, testConnection, isLlmConfigured } from '../lib/llm'
 import { ensureHostPermission } from '../lib/permissions'
 import type { Settings } from '../lib/types'
 
 export function Options() {
   const [settings, setSettings] = useState<Settings>({})
   const [status, setStatus] = useState<string>('')
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | 'testing' | null>(null)
 
   useEffect(() => {
     getSettings().then(setSettings)
@@ -28,6 +29,12 @@ export function Options() {
     await saveSettings(settings)
     setStatus('Saved')
     setTimeout(() => setStatus(''), 1500)
+  }
+
+  async function handleTestConnection() {
+    setTestResult('testing')
+    const result = await testConnection(settings)
+    setTestResult(result)
   }
 
   return (
@@ -99,6 +106,27 @@ export function Options() {
             />
           </section>
         </>
+      )}
+
+      {isLlmConfigured(settings) && (
+        <section style={{ marginTop: 12 }}>
+          <button
+            onClick={handleTestConnection}
+            disabled={testResult === 'testing'}
+            style={{
+              padding: '6px 14px', fontSize: 13, background: 'none', color: '#1f6feb',
+              border: '1px solid #1f6feb', borderRadius: 6, cursor: testResult === 'testing' ? 'default' : 'pointer',
+            }}
+          >
+            {testResult === 'testing' ? 'Testing…' : 'Test connection'}
+          </button>
+          {testResult && testResult !== 'testing' && (
+            <p style={{ color: testResult.ok ? '#2da44e' : '#cf222e', fontSize: 12, marginTop: 6 }}>
+              {testResult.ok ? '✓ ' : '✗ '}
+              {testResult.message}
+            </p>
+          )}
+        </section>
       )}
 
       <section style={{ marginTop: 20 }}>

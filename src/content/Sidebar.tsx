@@ -420,6 +420,7 @@ export function Sidebar() {
                           ) : (
                             <RepoMapView
                               graph={graph}
+                              hasPat={hasPat}
                               onOpenFlow={(root) => setView({ kind: 'flow', root })}
                               onOpenTour={(root, label) => setView({ kind: 'tour', root, label })}
                             />
@@ -501,10 +502,12 @@ function useCurrentHref(): string {
 
 function RepoMapView({
   graph,
+  hasPat,
   onOpenFlow,
   onOpenTour,
 }: {
   graph: RepoGraph
+  hasPat: boolean
   onOpenFlow: (root: string) => void
   onOpenTour: (root: string, label?: string) => void
 }) {
@@ -522,6 +525,15 @@ function RepoMapView({
           Repo has {graph.totalCodeFileCount.toLocaleString()} code files — too many to fully index quickly, so
           the {graph.indexedFileCount.toLocaleString()} most likely-central files (entry points and shallower
           paths first) were prioritized. The dependency graph and impact analysis only cover those.
+          {!hasPat && (
+            <>
+              {' '}
+              <a href="#" onClick={openOptions} className="cn-link">
+                Add a GitHub token
+              </a>{' '}
+              to raise the indexed-file cap from 1,500 to 20,000.
+            </>
+          )}
         </div>
       )}
 

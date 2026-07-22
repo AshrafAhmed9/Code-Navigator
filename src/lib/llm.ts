@@ -62,6 +62,30 @@ export interface LlmRequest {
   groundedPaths: string[]
 }
 
+/**
+ * Fires one real, minimal request through the exact same code path
+ * production narratives use, so it validates key + endpoint + model
+ * together rather than checking them separately and hoping. A custom
+ * endpoint in particular has no built-in default to fall back on, so a
+ * typo'd URL or an unavailable local model would otherwise only surface as
+ * "why isn't my LLM working?" the first time a real narrative fails.
+ */
+export async function testConnection(settings: Settings): Promise<{ ok: boolean; message: string }> {
+  try {
+    let gotResponse = false
+    const req: LlmRequest = { system: 'Reply with a single word.', prompt: 'Say OK.', groundedPaths: [] }
+    for await (const delta of streamCompletion(settings, req)) {
+      if (delta) gotResponse = true
+      break // one real delta is enough to prove the whole chain works
+    }
+    return gotResponse
+      ? { ok: true, message: 'Connected successfully.' }
+      : { ok: false, message: 'Connected, but got no response — double-check the model name.' }
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 export function isLlmConfigured(settings: Settings): boolean {
   const apiKey = settings.llmApiKey?.trim()
   if (!apiKey) return false

@@ -14,11 +14,15 @@ type State =
 
 export function NarrativePanel({
   label,
+  loadingLabel,
   buildRequest,
   deps,
 }: {
   label: string
-  buildRequest: () => LlmRequest
+  /** Shown while waiting, before streaming starts — e.g. "Reading file…" for a request that fetches source first. Defaults to "Thinking…". */
+  loadingLabel?: string
+  /** May fetch data first (e.g. file contents) before building the prompt — awaited before the LLM call starts. */
+  buildRequest: () => LlmRequest | Promise<LlmRequest>
   deps: unknown[]
 }) {
   const [state, setState] = useState<State>({ kind: 'loading' })
@@ -35,7 +39,8 @@ export function NarrativePanel({
         return
       }
       try {
-        const req = buildRequest()
+        const req = await buildRequest()
+        if (cancelledRef.current) return
         let acc = ''
         setState({ kind: 'streaming', text: '' })
         for await (const delta of streamCompletion(settings, req)) {
@@ -83,7 +88,7 @@ export function NarrativePanel({
         {state.kind !== 'error' && !flagged && <span className="cn-badge cn-badge-inferred">LLM-inferred</span>}
         {flagged && <span className="cn-badge cn-badge-warning">⚠ unverified reference</span>}
       </div>
-      {state.kind === 'loading' && <div className="cn-muted">Thinking…</div>}
+      {state.kind === 'loading' && <div className="cn-muted">{loadingLabel ?? 'Thinking…'}</div>}
       {(state.kind === 'streaming' || state.kind === 'done') && (
         <div className="cn-purpose-text">
           {state.text || '…'}

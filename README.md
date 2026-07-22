@@ -401,6 +401,13 @@ TypeScript, React 19, Vite + `@crxjs/vite-plugin` (MV3 bundling), `idb`
   unresolved); an ambiguous absolute import (ties between multiple
   same-named files) intentionally resolves to nothing rather than guessing
   wrong.
+- **A very large repo's indexing can fail partially without a distinct
+  warning.** If GraphQL batching and its REST fallback both hit errors for
+  the same files (rare — needs a genuine network/API failure, not just
+  hitting the file cap), those files are silently treated the same as
+  capped-out ones: present in the file tree, absent from the dependency
+  graph. Check the rate-limit footer and browser console if results seem
+  thinner than expected.
 
 ---
 

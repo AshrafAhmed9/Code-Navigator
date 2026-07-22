@@ -5,6 +5,7 @@ import { detectCoreSystems } from '../lib/systems'
 import { getSettings } from '../lib/settings'
 import { isLlmConfigured, streamCompletion } from '../lib/llm'
 import { buildFindPrompt } from '../lib/prompts'
+import { findUngroundedPaths } from '../lib/grounding'
 
 export function CommandPalette({
   graph,
@@ -19,7 +20,7 @@ export function CommandPalette({
 }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<FindResult[]>([])
-  const [narrative, setNarrative] = useState<{ text: string; streaming: boolean } | null>(null)
+  const [narrative, setNarrative] = useState<{ text: string; streaming: boolean; ungroundedPaths: string[] } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const narrativeToken = useRef(0)
 
@@ -46,15 +47,17 @@ export function CommandPalette({
       getSettings().then(async (settings) => {
         if (!isLlmConfigured(settings) || narrativeToken.current !== token) return
         try {
-          setNarrative({ text: '', streaming: true })
+          setNarrative({ text: '', streaming: true, ungroundedPaths: [] })
           const req = buildFindPrompt(graph, q, found.map((r) => r.file.path))
           let acc = ''
           for await (const delta of streamCompletion(settings, req)) {
             if (narrativeToken.current !== token) return
             acc += delta
-            setNarrative({ text: acc, streaming: true })
+            setNarrative({ text: acc, streaming: true, ungroundedPaths: [] })
           }
-          if (narrativeToken.current === token) setNarrative({ text: acc, streaming: false })
+          if (narrativeToken.current === token) {
+            setNarrative({ text: acc, streaming: false, ungroundedPaths: findUngroundedPaths(acc, req.groundedPaths) })
+          }
         } catch {
           if (narrativeToken.current === token) setNarrative(null)
         }
@@ -88,6 +91,12 @@ export function CommandPalette({
           <div className="cn-narrative">
             {narrative.text || '…'}
             {narrative.streaming && <span className="cn-cursor">▍</span>}
+            {!narrative.streaming && narrative.ungroundedPaths.length > 0 && (
+              <div className="cn-grounding-warning" style={{ marginTop: 8 }}>
+                ⚠ Mentions {narrative.ungroundedPaths.length === 1 ? 'a file path' : 'file paths'} not in the
+                candidate list — {narrative.ungroundedPaths.join(', ')}. Verify before trusting this claim.
+              </div>
+            )}
           </div>
         )}
 
