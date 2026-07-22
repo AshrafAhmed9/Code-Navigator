@@ -251,9 +251,14 @@ export function Sidebar() {
     localStorage.setItem('cn-collapsed', '0')
   }
 
-  // Pinned mode pushes GitHub's own page content over to reserve room for the
-  // sidebar, instead of floating on top of it — and the panel itself widens
-  // (drag-resizable) rather than staying the same size.
+  // Pinned mode pushes GitHub's own page content over to reserve room for
+  // the panel — but only the panel. The toggle+grip are a small,
+  // vertically-centered floating control, not a full-height column; reserving
+  // margin for their width too (as this used to do, pinnedWidth + 42) left an
+  // empty 42px-wide strip running the *entire* height of the page, since the
+  // toggle only actually occupies a small slice of it near the middle. That
+  // empty strip was the visible "gap," not GitHub's own layout. The toggle
+  // simply overlays whatever's beneath it (page or panel) instead.
   useEffect(() => {
     const html = document.documentElement
     const marginProp = dockSide === 'left' ? 'marginLeft' : 'marginRight'
@@ -261,7 +266,7 @@ export function Sidebar() {
     // visible on repo pages — never push the page content over for an invisible
     // panel on a non-repo page.
     if (ref && pinned && !collapsed) {
-      html.style[marginProp] = `${pinnedWidth + 42}px`
+      html.style[marginProp] = `${pinnedWidth}px`
       html.style.transition = resizeState.current ? 'none' : 'margin 0.2s ease'
     } else {
       html.style.marginLeft = ''
