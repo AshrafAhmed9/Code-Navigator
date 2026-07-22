@@ -402,19 +402,6 @@ export function Sidebar() {
               <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
             </svg>
           </button>
-          <button
-            className="cn-collapse-tab"
-            onClick={toggle}
-            title={collapsed ? 'Expand Code Navigator' : 'Collapse Code Navigator'}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path
-                d={((!collapsed && dockSide === 'right') || (collapsed && dockSide === 'left')) ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6'}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
         </div>
         <div className={`cn-panel ${!collapsed || hoverPreview ? '' : 'cn-panel-hidden'}`} style={{ width: pinnedWidth }}>
             <div
