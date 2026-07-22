@@ -322,6 +322,22 @@ export function Sidebar() {
     return pinned && !collapsed ? 0 : window.innerHeight / 2
   }
 
+  // cn-root's OWN top/transform switch instantly (no CSS transition) the
+  // moment pinned mode toggles — see .cn-root.cn-pinned. Since rootAnchorY()
+  // flips in that same instant, restingEdgeTop's value flips too — and
+  // without this, cn-edge-controls' `transition: top` would smoothly
+  // interpolate that flip on top of root's already-instant jump, so the
+  // toggle visibly snaps to the far edge and then slides back to center
+  // instead of just staying centered throughout. Comparing against a ref
+  // during render (not in a useEffect, which would run one paint too late)
+  // catches exactly the render where this happens and suppresses the
+  // transition for that one frame only, so both jumps land together instead
+  // of one lagging the other.
+  const isPinnedActive = pinned && !collapsed
+  const pinnedActiveRef = useRef(isPinnedActive)
+  const pinnedActiveJustChanged = pinnedActiveRef.current !== isPinnedActive
+  pinnedActiveRef.current = isPinnedActive
+
   // Where the toggle rests, expressed the same way as its live drag position
   // (root-relative px around the toggle's own center) so letting go of a drag
   // animates smoothly into place via the CSS transition on cn-edge-controls,
@@ -344,7 +360,13 @@ export function Sidebar() {
       state.moved = true
     }
     if (state.moved) {
-      const anchorX = state.startDockSide === 'right' ? window.innerWidth : 0
+      // cn-root's `right: 0` anchors to the layout viewport
+      // (document.documentElement.clientWidth), which excludes a classic
+      // reserved-space scrollbar — window.innerWidth includes it. Using
+      // innerWidth here would make the dragged toggle trail the cursor by
+      // the scrollbar's width on platforms that have one (invisible on
+      // macOS's overlay scrollbars, which is why this was easy to miss).
+      const anchorX = state.startDockSide === 'right' ? document.documentElement.clientWidth : 0
       setDragPos({ left: e.clientX - anchorX, top: e.clientY - state.startAnchorY })
     }
   }, [])
@@ -432,12 +454,16 @@ export function Sidebar() {
             left: dragPos ? dragPos.left : restingEdgeLeft(),
             top: dragPos ? dragPos.top : restingEdgeTop(),
             // No transition while actively being dragged or resized (cursor
-            // tracking must be 1:1, a transition would visibly lag behind).
-            // Removing this override — on drag release, or when the panel's
-            // open/close state shifts the resting position — lets the CSS
-            // transition on cn-edge-controls animate the change: short and
-            // eased, not a slow drawn-out slide.
-            transition: dragPos || resizeState.current ? 'none' : undefined,
+            // tracking must be 1:1, a transition would visibly lag behind),
+            // or on the exact render where pinned mode just toggled (see
+            // pinnedActiveJustChanged above — cn-root's own frame jumps
+            // instantly then, so this needs to land in the same instant
+            // rather than animate on top of it). Removing this override —
+            // on drag release, or when the panel's open/close state shifts
+            // the resting position — lets the CSS transition on
+            // cn-edge-controls animate the change: short and eased, not a
+            // slow drawn-out slide.
+            transition: dragPos || resizeState.current || pinnedActiveJustChanged ? 'none' : undefined,
           }}
         >
           <button
