@@ -303,8 +303,19 @@ export function Sidebar() {
   // works; only a real drag triggers the follow/settle motion.
   const DRAG_MOVE_THRESHOLD = 6
   const EDGE_HALF_WIDTH = 21 // half the 42px toggle — cn-edge-controls is centered on `left` via translate(-50%, -50%)
-  const toggleDragState = useRef<{ startX: number; startY: number; moved: boolean; startDockSide: 'left' | 'right' } | null>(null)
+  const toggleDragState = useRef<{ startX: number; startY: number; moved: boolean; startDockSide: 'left' | 'right'; startAnchorY: number } | null>(null)
   const [dragPos, setDragPos] = useState<{ left: number; top: number } | null>(null)
+
+  // cn-root's own vertical reference point, in viewport coordinates: normally
+  // it centers itself via `top: 50%` (so its reference point already sits at
+  // the viewport's vertical middle), but pinned mode switches it to
+  // `top: 0; height: 100vh` instead (see .cn-root.cn-pinned) — its reference
+  // point becomes the viewport's top edge, not the middle. Both
+  // restingEdgeTop and the live drag tracking need to agree on this, or the
+  // toggle ends up somewhere other than where it visually should be.
+  function rootAnchorY(): number {
+    return pinned && !collapsed ? 0 : window.innerHeight / 2
+  }
 
   // Where the toggle rests, expressed the same way as its live drag position
   // (root-relative px around the toggle's own center) so letting go of a drag
@@ -314,6 +325,9 @@ export function Sidebar() {
   function restingEdgeLeft(): number {
     const offset = !collapsed || hoverPreview ? pinnedWidth : 0
     return dockSide === 'right' ? -(offset + EDGE_HALF_WIDTH) : offset + EDGE_HALF_WIDTH
+  }
+  function restingEdgeTop(): number {
+    return window.innerHeight / 2 - rootAnchorY()
   }
 
   const onToggleDragMove = useCallback((e: PointerEvent) => {
@@ -325,13 +339,8 @@ export function Sidebar() {
       state.moved = true
     }
     if (state.moved) {
-      // cn-root anchors at (dockSide==='right' ? window.innerWidth : 0), viewport-middle
-      // vertically, regardless of pinned/collapsed state — see the CSS comments on
-      // .cn-root and .cn-panel. Converting the raw cursor position into that same
-      // root-relative space is what lets drag and rest share one coordinate system.
       const anchorX = state.startDockSide === 'right' ? window.innerWidth : 0
-      const anchorY = window.innerHeight / 2
-      setDragPos({ left: e.clientX - anchorX, top: e.clientY - anchorY })
+      setDragPos({ left: e.clientX - anchorX, top: e.clientY - state.startAnchorY })
     }
   }, [])
   const onToggleDragUp = useCallback((e: PointerEvent) => {
@@ -349,7 +358,7 @@ export function Sidebar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onToggleDragMove])
   function onToggleDragDown(e: React.PointerEvent) {
-    toggleDragState.current = { startX: e.clientX, startY: e.clientY, moved: false, startDockSide: dockSide }
+    toggleDragState.current = { startX: e.clientX, startY: e.clientY, moved: false, startDockSide: dockSide, startAnchorY: rootAnchorY() }
     document.body.style.userSelect = 'none'
     window.addEventListener('pointermove', onToggleDragMove)
     window.addEventListener('pointerup', onToggleDragUp)
@@ -416,7 +425,7 @@ export function Sidebar() {
           className="cn-edge-controls"
           style={{
             left: dragPos ? dragPos.left : restingEdgeLeft(),
-            top: dragPos ? dragPos.top : 0,
+            top: dragPos ? dragPos.top : restingEdgeTop(),
             // No transition while actively being dragged or resized (cursor
             // tracking must be 1:1, a transition would visibly lag behind).
             // Removing this override — on drag release, or when the panel's
