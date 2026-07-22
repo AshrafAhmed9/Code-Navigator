@@ -7,7 +7,14 @@ Ground every statement strictly in the evidence provided (the file's imports,
 importers, exported symbols, and source excerpt). Never invent behavior,
 dependencies, or purposes not visible in the evidence. If the evidence is too
 thin to say something specific, say so plainly instead of guessing. Be
-concise: 2-4 sentences, no preamble, no markdown headers.`
+concise: 2-4 sentences, no preamble, no markdown headers.
+
+Write like GitHub Copilot Chat: plain, everyday language, short sentences,
+one idea at a time. No jargon unless the evidence itself uses that term. No
+hedging filler ("it appears that," "this seems to suggest") — just say the
+thing plainly, and say plainly when you don't know. Talk directly to the
+developer reading this, like a teammate explaining it out loud, not like
+documentation.`
 
 export function buildFilePurposePrompt(
   graph: RepoGraph,
@@ -131,7 +138,7 @@ export function buildFindPrompt(graph: RepoGraph, query: string, candidates: str
     .join('\n')
 
   return {
-    system: `You rank and explain search results inside a code navigation tool. Only reference files in the provided candidate list -- never invent file paths. Be concise.`,
+    system: `You rank and explain search results inside a code navigation tool. Only reference files in the provided candidate list -- never invent file paths. Be concise. Write like GitHub Copilot Chat: plain, everyday language, no jargon, no hedging filler -- talk directly to the developer like a teammate, not documentation.`,
     prompt: `A developer searched for "${query}" in this repository. Here are the top candidate files ranked by a heuristic (filename/symbol match + how many other files depend on them):\n\n${evidence}\n\nIn 2-3 sentences, say which of these files is most likely the right starting point and why, citing only paths from the list above.`,
     groundedPaths: candidates,
   }
