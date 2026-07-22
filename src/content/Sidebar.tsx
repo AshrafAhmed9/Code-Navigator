@@ -432,6 +432,11 @@ export function Sidebar() {
               <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
             </svg>
           </button>
+          <div className="cn-drag-grip" onPointerDown={onToggleDragDown} title="Drag to move">
+            <span />
+            <span />
+            <span />
+          </div>
         </div>
         <div className={`cn-panel ${!collapsed || hoverPreview ? '' : 'cn-panel-hidden'}`} style={{ width: pinnedWidth }}>
             <div

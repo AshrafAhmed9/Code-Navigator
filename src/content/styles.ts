@@ -68,6 +68,11 @@ export const styles = `
   align-items: center;
 }
 
+/* The panel now docks flush against the true screen edge (see .cn-panel),
+   not against this toggle — dragging can leave it anywhere on either side,
+   so there's no adjacent element to leave a flush/unrounded seam for
+   anymore. Rounded on top, flat on the bottom where cn-drag-grip attaches
+   right underneath it, forming one two-part pill together. */
 .cn-toggle {
   width: 42px;
   height: 42px;
@@ -80,15 +85,14 @@ export const styles = `
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   color: var(--cn-muted);
   border: 1px solid var(--cn-hairline);
-  border-right: none;
-  border-radius: 14px 0 0 14px;
+  border-bottom: none;
+  border-radius: 14px 14px 0 0;
   cursor: grab;
   transition: background 0.2s var(--cn-ease), color 0.2s var(--cn-ease), transform 0.2s var(--cn-ease);
 }
 .cn-toggle:hover { color: var(--cn-accent); transform: scale(1.04); }
 .cn-toggle:active { cursor: grabbing; }
 .cn-toggle:active { transform: scale(0.97); }
-.cn-root.cn-collapsed .cn-toggle { border-radius: 14px; border-right: 1px solid var(--cn-hairline); }
 
 /* Positioned entirely via an inline left/top style from Sidebar.tsx,
    both expressed as pixels relative to cn-root's own anchor point (which
@@ -105,8 +109,32 @@ export const styles = `
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
 }
+
+/* A small grip below the toggle — three short lines, the universal "this is
+   draggable" signal — so the drag interaction isn't a hidden affordance you
+   only find by accidentally grabbing the search icon. Draggable itself too,
+   via the same handler as the toggle. */
+.cn-drag-grip {
+  width: 42px;
+  height: 12px;
+  min-width: 42px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: var(--cn-panel);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid var(--cn-hairline);
+  border-radius: 0 0 10px 10px;
+  cursor: grab;
+}
+.cn-drag-grip:active { cursor: grabbing; }
+.cn-drag-grip span { width: 14px; height: 1.5px; border-radius: 1px; background: var(--cn-muted-dim); }
+.cn-drag-grip:hover span { background: var(--cn-muted); }
 
 .cn-panel {
   /* Absolutely positioned (relative to cn-root, its nearest positioned
@@ -484,9 +512,7 @@ a.cn-checklist-label.cn-link { color: var(--cn-accent); }
 .cn-resize-handle-left::after { left: auto; right: 2px; }
 
 /* Dock on the left edge instead of right — mirror everything */
-.cn-root.cn-dock-left { left: 0; right: auto; flex-direction: row-reverse; }
-.cn-root.cn-dock-left .cn-toggle { border-radius: 0 14px 14px 0; border: 1px solid var(--cn-hairline); border-left: none; }
-.cn-root.cn-dock-left.cn-collapsed .cn-toggle { border-radius: 14px; border-left: 1px solid var(--cn-hairline); }
+.cn-root.cn-dock-left { left: 0; right: auto; }
 .cn-root.cn-dock-left .cn-panel { border-radius: 0 18px 18px 0; border: 1px solid var(--cn-hairline); border-left: none; box-shadow: 8px 16px 48px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.04) inset; }
 /* Pinned + dock-left both active: keep flat edges, overriding the rounded dock-left corners above (later rule wins on equal specificity). */
 .cn-root.cn-pinned.cn-dock-left .cn-panel { border-radius: 0; box-shadow: 8px 0 32px rgba(0,0,0,0.35); }
