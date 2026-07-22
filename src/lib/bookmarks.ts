@@ -18,6 +18,21 @@ export async function isBookmarked(url: string): Promise<boolean> {
   return marks.some((b) => b.url === url)
 }
 
+/**
+ * BookmarksPanel now stays mounted across tab switches (see Sidebar.tsx) for
+ * performance, instead of remounting — which used to double as an accidental
+ * "refresh on tab visit." This is the real, deliberate replacement: reactive
+ * to actual storage changes, so a bookmark added from anywhere (the star
+ * button, ⌘K, even a second github.com tab) shows up without needing a remount.
+ */
+export function onBookmarksChanged(cb: () => void): () => void {
+  const listener = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
+    if (area === 'local' && STORAGE_KEY in changes) cb()
+  }
+  chrome.storage.onChanged.addListener(listener)
+  return () => chrome.storage.onChanged.removeListener(listener)
+}
+
 // Serialize all mutations: each is a read-modify-write on chrome.storage, so
 // two quick stars/unstars could otherwise both read the same list and the
 // second write would clobber the first. Chaining makes each see the prior result.

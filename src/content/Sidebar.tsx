@@ -49,6 +49,18 @@ export function Sidebar() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [view, setView] = useState<View>({ kind: 'repo-map' })
   const [homeTab, setHomeTab] = useState<HomeTab>('tree')
+  // Tabs mount once, on first visit, and then stay mounted (hidden via CSS)
+  // rather than being torn down when you switch away — see the render below.
+  // On a huge repo, FileTree rebuilds its whole nested structure from
+  // scratch on mount; unmounting it on every tab switch (the previous
+  // ternary-based approach) meant that cost was paid again on every single
+  // switch back, which is what actually made large repos feel laggy —
+  // nothing to do with network or the data cache, which was already fine.
+  const [visitedTabs, setVisitedTabs] = useState<Set<HomeTab>>(() => new Set(['tree']))
+  function selectTab(tab: HomeTab) {
+    setHomeTab(tab)
+    setVisitedTabs((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)))
+  }
   const [dockSide, setDockSide] = useState<'left' | 'right'>('right')
   const [codeFont, setCodeFont] = useState<'sans' | 'mono'>('sans')
   const [theme, setTheme] = useState<Theme>(() => detectGitHubTheme())
@@ -341,16 +353,16 @@ export function Sidebar() {
 
             {!prRef && (status === 'ready' || status === 'indexing') && graph && view.kind !== 'file' && (
               <div className="cn-tabs">
-                <button className={`cn-tab ${homeTab === 'map' ? 'cn-tab-active' : ''}`} onClick={() => setHomeTab('map')}>
+                <button className={`cn-tab ${homeTab === 'map' ? 'cn-tab-active' : ''}`} onClick={() => selectTab('map')}>
                   Map
                 </button>
-                <button className={`cn-tab ${homeTab === 'tree' ? 'cn-tab-active' : ''}`} onClick={() => setHomeTab('tree')}>
+                <button className={`cn-tab ${homeTab === 'tree' ? 'cn-tab-active' : ''}`} onClick={() => selectTab('tree')}>
                   Tree
                 </button>
-                <button className={`cn-tab ${homeTab === 'bookmarks' ? 'cn-tab-active' : ''}`} onClick={() => setHomeTab('bookmarks')}>
+                <button className={`cn-tab ${homeTab === 'bookmarks' ? 'cn-tab-active' : ''}`} onClick={() => selectTab('bookmarks')}>
                   Bookmarks
                 </button>
-                <button className={`cn-tab ${homeTab === 'recent' ? 'cn-tab-active' : ''}`} onClick={() => setHomeTab('recent')}>
+                <button className={`cn-tab ${homeTab === 'recent' ? 'cn-tab-active' : ''}`} onClick={() => selectTab('recent')}>
                   Recent
                 </button>
               </div>
@@ -409,21 +421,34 @@ export function Sidebar() {
                             <span>Find anything…</span>
                             <span className="cn-kbd">⌘K</span>
                           </button>
-                          {homeTab === 'tree' ? (
-                            <FileTree graph={graph} />
-                          ) : homeTab === 'bookmarks' ? (
-                            <BookmarksPanel repoKey={graph.repoKey} />
-                          ) : homeTab === 'recent' ? (
-                            <HistoryPanel repoKey={graph.repoKey} />
-                          ) : status === 'indexing' ? (
-                            <div className="cn-muted">Map view will be available once indexing finishes.</div>
-                          ) : (
-                            <RepoMapView
-                              graph={graph}
-                              hasPat={hasPat}
-                              onOpenFlow={(root) => setView({ kind: 'flow', root })}
-                              onOpenTour={(root, label) => setView({ kind: 'tour', root, label })}
-                            />
+                          {visitedTabs.has('tree') && (
+                            <div style={{ display: homeTab === 'tree' ? 'block' : 'none' }}>
+                              <FileTree graph={graph} />
+                            </div>
+                          )}
+                          {visitedTabs.has('bookmarks') && (
+                            <div style={{ display: homeTab === 'bookmarks' ? 'block' : 'none' }}>
+                              <BookmarksPanel repoKey={graph.repoKey} />
+                            </div>
+                          )}
+                          {visitedTabs.has('recent') && (
+                            <div style={{ display: homeTab === 'recent' ? 'block' : 'none' }}>
+                              <HistoryPanel repoKey={graph.repoKey} />
+                            </div>
+                          )}
+                          {visitedTabs.has('map') && (
+                            <div style={{ display: homeTab === 'map' ? 'block' : 'none' }}>
+                              {status === 'indexing' ? (
+                                <div className="cn-muted">Map view will be available once indexing finishes.</div>
+                              ) : (
+                                <RepoMapView
+                                  graph={graph}
+                                  hasPat={hasPat}
+                                  onOpenFlow={(root) => setView({ kind: 'flow', root })}
+                                  onOpenTour={(root, label) => setView({ kind: 'tour', root, label })}
+                                />
+                              )}
+                            </div>
                           )}
                         </>
                       )}

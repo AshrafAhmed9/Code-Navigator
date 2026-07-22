@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getHistory, clearHistory, type HistoryEntry } from '../lib/history'
+import { getHistory, clearHistory, onHistoryChanged, type HistoryEntry } from '../lib/history'
 
 const KIND_LABEL: Record<HistoryEntry['kind'], string> = {
   file: 'File',
@@ -14,6 +14,9 @@ export function HistoryPanel({ repoKey }: { repoKey: string }) {
 
   useEffect(() => {
     getHistory().then(setEntries)
+    return onHistoryChanged(() => {
+      getHistory().then(setEntries)
+    })
   }, [])
 
   async function onClear() {

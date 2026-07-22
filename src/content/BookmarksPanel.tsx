@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getBookmarks, removeBookmark, type Bookmark } from '../lib/bookmarks'
+import { getBookmarks, removeBookmark, onBookmarksChanged, type Bookmark } from '../lib/bookmarks'
 
 const KIND_LABEL: Record<Bookmark['kind'], string> = {
   file: 'File',
@@ -14,6 +14,9 @@ export function BookmarksPanel({ repoKey }: { repoKey?: string }) {
 
   useEffect(() => {
     getBookmarks().then(setBookmarks)
+    return onBookmarksChanged(() => {
+      getBookmarks().then(setBookmarks)
+    })
   }, [])
 
   async function onRemove(url: string) {

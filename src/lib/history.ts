@@ -43,3 +43,12 @@ async function doRecordVisit(url: string, title: string): Promise<void> {
 export async function clearHistory(): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEY]: [] })
 }
+
+/** Same reasoning as bookmarks.ts's onBookmarksChanged — HistoryPanel stays mounted across tab switches now, so it needs a real change signal instead of relying on remount-as-refresh. */
+export function onHistoryChanged(cb: () => void): () => void {
+  const listener = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
+    if (area === 'local' && STORAGE_KEY in changes) cb()
+  }
+  chrome.storage.onChanged.addListener(listener)
+  return () => chrome.storage.onChanged.removeListener(listener)
+}
