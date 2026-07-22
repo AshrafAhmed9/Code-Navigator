@@ -90,23 +90,23 @@ export const styles = `
 .cn-toggle:active { transform: scale(0.97); }
 .cn-root.cn-collapsed .cn-toggle { border-radius: 14px; border-right: 1px solid var(--cn-hairline); }
 
-/* Absolutely positioned (like cn-panel) and offset dynamically via an
-   inline right/left style from Sidebar.tsx: flush at the true browser
-   edge while collapsed, and shifted inward by the panel's current width
-   while it's open — so the toggle sits at the panel's page-facing boundary
-   (like a normal sidebar grab handle) rather than staying glued to the
-   window edge underneath/behind the open panel. */
+/* Positioned entirely via an inline left/top style from Sidebar.tsx,
+   both expressed as pixels relative to cn-root's own anchor point (which
+   sits at the true browser edge horizontally, viewport-middle vertically —
+   see the .cn-panel comment below) with this element centered on that point
+   via translate(-50%, -50%). Using left/top (never right, never a CSS
+   percentage) for every state — resting, dragged, mid-release-settle — is
+   what lets one value smoothly interpolate into the next: switching to a
+   differently-anchored property partway through wouldn't animate, it'd jump. */
 .cn-edge-controls {
   position: absolute;
-  top: 50%;
-  right: 0;
-  transform: translateY(-50%);
+  transform: translate(-50%, -50%);
+  transition: left 0.2s var(--cn-ease), top 0.2s var(--cn-ease);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
 }
-.cn-root.cn-dock-left .cn-edge-controls { right: auto; left: 0; }
 
 .cn-panel {
   /* Absolutely positioned (relative to cn-root, its nearest positioned

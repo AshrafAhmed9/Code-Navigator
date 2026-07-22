@@ -295,21 +295,43 @@ export function Sidebar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onResizeMove])
 
-  // Dragging the edge toggle to the opposite half of the screen switches
-  // which side it's docked on — replaces the old dedicated "switch side"
-  // button. A short drag (below the move threshold) is treated as a plain
+  // Dragging the edge toggle lets it follow the cursor freely while held,
+  // then settles back onto the edge on release — which side it re-docks to
+  // is only decided at that point (replaces the old dedicated "switch side"
+  // button). A short drag (below the move threshold) is treated as a plain
   // click instead, so the existing collapse/expand behavior on click still
-  // works; only a real horizontal drag re-docks.
+  // works; only a real drag triggers the follow/settle motion.
   const DRAG_MOVE_THRESHOLD = 6
-  const toggleDragState = useRef<{ startX: number; startY: number; moved: boolean } | null>(null)
+  const EDGE_HALF_WIDTH = 21 // half the 42px toggle — cn-edge-controls is centered on `left` via translate(-50%, -50%)
+  const toggleDragState = useRef<{ startX: number; startY: number; moved: boolean; startDockSide: 'left' | 'right' } | null>(null)
+  const [dragPos, setDragPos] = useState<{ left: number; top: number } | null>(null)
+
+  // Where the toggle rests, expressed the same way as its live drag position
+  // (root-relative px around the toggle's own center) so letting go of a drag
+  // animates smoothly into place via the CSS transition on cn-edge-controls,
+  // instead of jumping — switching to a differently-anchored CSS property at
+  // that moment wouldn't interpolate.
+  function restingEdgeLeft(): number {
+    const offset = !collapsed || hoverPreview ? pinnedWidth : 0
+    return dockSide === 'right' ? -(offset + EDGE_HALF_WIDTH) : offset + EDGE_HALF_WIDTH
+  }
 
   const onToggleDragMove = useCallback((e: PointerEvent) => {
-    if (!toggleDragState.current) return
-    const dx = e.clientX - toggleDragState.current.startX
-    const dy = e.clientY - toggleDragState.current.startY
-    if (Math.abs(dx) > DRAG_MOVE_THRESHOLD || Math.abs(dy) > DRAG_MOVE_THRESHOLD) {
-      toggleDragState.current.moved = true
-      setDockSideTo(e.clientX < window.innerWidth / 2 ? 'left' : 'right')
+    const state = toggleDragState.current
+    if (!state) return
+    const dx = e.clientX - state.startX
+    const dy = e.clientY - state.startY
+    if (!state.moved && (Math.abs(dx) > DRAG_MOVE_THRESHOLD || Math.abs(dy) > DRAG_MOVE_THRESHOLD)) {
+      state.moved = true
+    }
+    if (state.moved) {
+      // cn-root anchors at (dockSide==='right' ? window.innerWidth : 0), viewport-middle
+      // vertically, regardless of pinned/collapsed state — see the CSS comments on
+      // .cn-root and .cn-panel. Converting the raw cursor position into that same
+      // root-relative space is what lets drag and rest share one coordinate system.
+      const anchorX = state.startDockSide === 'right' ? window.innerWidth : 0
+      const anchorY = window.innerHeight / 2
+      setDragPos({ left: e.clientX - anchorX, top: e.clientY - anchorY })
     }
   }, [])
   const onToggleDragUp = useCallback((e: PointerEvent) => {
@@ -320,10 +342,14 @@ export function Sidebar() {
     window.removeEventListener('pointerup', onToggleDragUp)
     if (state && !state.moved) toggle()
     else if (state) setDockSideTo(e.clientX < window.innerWidth / 2 ? 'left' : 'right')
+    // Clears the live-follow override; cn-edge-controls' own transition
+    // (re-enabled the moment this isn't overridden to 'none') carries it the
+    // rest of the way from wherever it was let go to the resting spot.
+    setDragPos(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onToggleDragMove])
   function onToggleDragDown(e: React.PointerEvent) {
-    toggleDragState.current = { startX: e.clientX, startY: e.clientY, moved: false }
+    toggleDragState.current = { startX: e.clientX, startY: e.clientY, moved: false, startDockSide: dockSide }
     document.body.style.userSelect = 'none'
     window.addEventListener('pointermove', onToggleDragMove)
     window.addEventListener('pointerup', onToggleDragUp)
@@ -385,11 +411,15 @@ export function Sidebar() {
         <div
           className="cn-edge-controls"
           style={{
-            [dockSide === 'left' ? 'left' : 'right']: !collapsed || hoverPreview ? pinnedWidth : 0,
-            // Track 1:1 with the cursor during an active resize drag (a
-            // transition would visibly lag behind); animate smoothly
-            // otherwise, in step with the panel's own open/close slide.
-            transition: resizeState.current ? 'none' : 'right 0.28s var(--cn-ease), left 0.28s var(--cn-ease)',
+            left: dragPos ? dragPos.left : restingEdgeLeft(),
+            top: dragPos ? dragPos.top : 0,
+            // No transition while actively being dragged or resized (cursor
+            // tracking must be 1:1, a transition would visibly lag behind).
+            // Removing this override — on drag release, or when the panel's
+            // open/close state shifts the resting position — lets the CSS
+            // transition on cn-edge-controls animate the change: short and
+            // eased, not a slow drawn-out slide.
+            transition: dragPos || resizeState.current ? 'none' : undefined,
           }}
         >
           <button
