@@ -241,6 +241,14 @@ export function Sidebar() {
       localStorage.setItem('cn-pinned', next ? '1' : '0')
       return next
     })
+    // The pin button only lives inside the panel, so it's reachable during a
+    // hover peek — but a peek doesn't set `collapsed` to false, and the
+    // cn-pinned CSS class requires !collapsed to take effect. Without this,
+    // clicking "pin" while only hover-previewing silently flips the
+    // `pinned` state with no visible change: the panel would slide shut the
+    // moment the cursor leaves, having never actually looked pinned.
+    setCollapsed(false)
+    localStorage.setItem('cn-collapsed', '0')
   }
 
   // Pinned mode pushes GitHub's own page content over to reserve room for the
