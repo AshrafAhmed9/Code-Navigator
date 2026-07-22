@@ -374,7 +374,16 @@ export function Sidebar() {
         onMouseEnter={onRootMouseEnter}
         onMouseLeave={onRootMouseLeave}
       >
-        <div className="cn-edge-controls">
+        <div
+          className="cn-edge-controls"
+          style={{
+            [dockSide === 'left' ? 'left' : 'right']: !collapsed || hoverPreview ? pinnedWidth : 0,
+            // Track 1:1 with the cursor during an active resize drag (a
+            // transition would visibly lag behind); animate smoothly
+            // otherwise, in step with the panel's own open/close slide.
+            transition: resizeState.current ? 'none' : 'right 0.28s var(--cn-ease), left 0.28s var(--cn-ease)',
+          }}
+        >
           <button
             className="cn-toggle"
             onPointerDown={onToggleDragDown}

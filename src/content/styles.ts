@@ -90,11 +90,23 @@ export const styles = `
 .cn-toggle:active { transform: scale(0.97); }
 .cn-root.cn-collapsed .cn-toggle { border-radius: 14px; border-right: 1px solid var(--cn-hairline); }
 
-/* justify-content: center matters specifically in pinned mode, where the
-   root is stretched to full viewport height (align-items: stretch below) —
-   without it these controls would drift to the top instead of staying
-   vertically centered on the edge. */
-.cn-edge-controls { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+/* Absolutely positioned (like cn-panel) and offset dynamically via an
+   inline right/left style from Sidebar.tsx: flush at the true browser
+   edge while collapsed, and shifted inward by the panel's current width
+   while it's open — so the toggle sits at the panel's page-facing boundary
+   (like a normal sidebar grab handle) rather than staying glued to the
+   window edge underneath/behind the open panel. */
+.cn-edge-controls {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.cn-root.cn-dock-left .cn-edge-controls { right: auto; left: 0; }
 
 /* A small, always-present, non-draggable collapse control — distinct from
    the draggable search toggle above it, so there's always one obvious,
@@ -132,7 +144,7 @@ export const styles = `
      made always-mounted. */
   position: absolute;
   top: 50%;
-  right: 100%;
+  right: 0;
   width: 344px;
   height: 80vh;
   max-height: 80vh;
@@ -156,7 +168,7 @@ export const styles = `
   transform: translate(var(--cn-panel-slide), var(--cn-panel-y));
   opacity: 1;
 }
-.cn-root.cn-dock-left .cn-panel { right: auto; left: 100%; }
+.cn-root.cn-dock-left .cn-panel { right: auto; left: 0; }
 
 /* Slides out toward the edge it's docked on and fades, instead of just
    popping in/out of existence — the panel stays mounted the whole time
