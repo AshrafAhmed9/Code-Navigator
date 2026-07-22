@@ -265,7 +265,7 @@ export function Sidebar() {
     }
   }, [ref, pinned, collapsed, dockSide, pinnedWidth])
 
-  const MIN_PINNED_WIDTH = 340
+  const MIN_PINNED_WIDTH = 220
   const MAX_PINNED_WIDTH = 880
 
   const onResizeMove = useCallback(

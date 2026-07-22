@@ -121,7 +121,18 @@ export const styles = `
 .cn-root.cn-dock-left .cn-collapse-tab { border-radius: 0 10px 10px 0; border-right: 1px solid var(--cn-hairline); border-left: none; }
 
 .cn-panel {
-  position: relative;
+  /* Absolutely positioned (relative to cn-root, its nearest positioned
+     ancestor) rather than a normal flex child — the panel is always mounted
+     now (for the slide animation below), and if it stayed in-flow its full
+     width would permanently inflate cn-root's own box even while slid off
+     screen, dragging the edge toggle inward, away from the browser edge,
+     looking like it was floating loose in the middle of the page. Being
+     absolute removes it from that sizing calculation entirely: cn-root's
+     box is just the toggle's size again, exactly like before this panel was
+     made always-mounted. */
+  position: absolute;
+  top: 50%;
+  right: 100%;
   width: 344px;
   height: 80vh;
   max-height: 80vh;
@@ -137,19 +148,22 @@ export const styles = `
   color: var(--cn-text);
   transition: border-radius 0.2s ease, transform 0.28s var(--cn-ease), opacity 0.22s var(--cn-ease);
   overflow: hidden;
-  transform: translateX(0);
+  /* CSS vars so pinned/hidden/dock-left states each set one axis
+     independently instead of fighting over which rule's transform
+     property wins by specificity. */
+  --cn-panel-slide: 0%;
+  --cn-panel-y: -50%;
+  transform: translate(var(--cn-panel-slide), var(--cn-panel-y));
   opacity: 1;
 }
+.cn-root.cn-dock-left .cn-panel { right: auto; left: 100%; }
+
 /* Slides out toward the edge it's docked on and fades, instead of just
    popping in/out of existence — the panel stays mounted the whole time
    (so state/scroll position survive a hover peek), only its presentation
    toggles. */
-.cn-panel-hidden {
-  transform: translateX(105%);
-  opacity: 0;
-  pointer-events: none;
-}
-.cn-root.cn-dock-left .cn-panel-hidden { transform: translateX(-105%); }
+.cn-panel-hidden { --cn-panel-slide: 105%; opacity: 0; pointer-events: none; }
+.cn-root.cn-dock-left .cn-panel-hidden { --cn-panel-slide: -105%; }
 
 .cn-header {
   display: flex;
@@ -463,7 +477,7 @@ a.cn-checklist-label.cn-link { color: var(--cn-accent); }
 
 /* Pinned mode: full-height side panel instead of a floating centered card */
 .cn-root.cn-pinned { top: 0; transform: none; height: 100vh; align-items: stretch; }
-.cn-root.cn-pinned .cn-panel { height: 100vh; max-height: 100vh; border-radius: 0; box-shadow: -8px 0 32px rgba(0,0,0,0.35); }
+.cn-root.cn-pinned .cn-panel { top: 0; --cn-panel-y: 0%; height: 100vh; max-height: 100vh; border-radius: 0; box-shadow: -8px 0 32px rgba(0,0,0,0.35); }
 .cn-root.cn-pinned.cn-dock-left .cn-panel { box-shadow: 8px 0 32px rgba(0,0,0,0.35); }
 /* The toggle stays visible even while pinned — it's the only way to drag
    the sidebar to the other side now that there's no separate "switch side"
