@@ -90,6 +90,36 @@ export const styles = `
 .cn-toggle:active { transform: scale(0.97); }
 .cn-root.cn-collapsed .cn-toggle { border-radius: 14px; border-right: 1px solid var(--cn-hairline); }
 
+/* justify-content: center matters specifically in pinned mode, where the
+   root is stretched to full viewport height (align-items: stretch below) —
+   without it these controls would drift to the top instead of staying
+   vertically centered on the edge. */
+.cn-edge-controls { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+
+/* A small, always-present, non-draggable collapse control — distinct from
+   the draggable search toggle above it, so there's always one obvious,
+   stable place to collapse/expand regardless of where the toggle has been
+   dragged to, or whether the sidebar is pinned. */
+.cn-collapse-tab {
+  width: 42px;
+  height: 20px;
+  min-width: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--cn-panel);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  color: var(--cn-muted);
+  border: 1px solid var(--cn-hairline);
+  border-right: none;
+  border-radius: 10px 0 0 10px;
+  cursor: pointer;
+  transition: background 0.15s var(--cn-ease), color 0.15s var(--cn-ease);
+}
+.cn-collapse-tab:hover { color: var(--cn-accent); background: var(--cn-card-hover); }
+.cn-root.cn-dock-left .cn-collapse-tab { border-radius: 0 10px 10px 0; border-right: 1px solid var(--cn-hairline); border-left: none; }
+
 .cn-panel {
   position: relative;
   width: 344px;
@@ -105,9 +135,21 @@ export const styles = `
   border-radius: 18px 0 0 18px;
   box-shadow: -8px 16px 48px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.04) inset;
   color: var(--cn-text);
-  transition: border-radius 0.2s ease;
+  transition: border-radius 0.2s ease, transform 0.28s var(--cn-ease), opacity 0.22s var(--cn-ease);
   overflow: hidden;
+  transform: translateX(0);
+  opacity: 1;
 }
+/* Slides out toward the edge it's docked on and fades, instead of just
+   popping in/out of existence — the panel stays mounted the whole time
+   (so state/scroll position survive a hover peek), only its presentation
+   toggles. */
+.cn-panel-hidden {
+  transform: translateX(105%);
+  opacity: 0;
+  pointer-events: none;
+}
+.cn-root.cn-dock-left .cn-panel-hidden { transform: translateX(-105%); }
 
 .cn-header {
   display: flex;
@@ -423,7 +465,10 @@ a.cn-checklist-label.cn-link { color: var(--cn-accent); }
 .cn-root.cn-pinned { top: 0; transform: none; height: 100vh; align-items: stretch; }
 .cn-root.cn-pinned .cn-panel { height: 100vh; max-height: 100vh; border-radius: 0; box-shadow: -8px 0 32px rgba(0,0,0,0.35); }
 .cn-root.cn-pinned.cn-dock-left .cn-panel { box-shadow: 8px 0 32px rgba(0,0,0,0.35); }
-.cn-root.cn-pinned .cn-toggle { display: none; }
+/* The toggle stays visible even while pinned — it's the only way to drag
+   the sidebar to the other side now that there's no separate "switch side"
+   button, and cn-collapse-tab (always visible) is the actual collapse
+   control, so this no longer needs to hide to avoid duplicating that job. */
 
 .cn-resize-handle {
   position: absolute; top: 0; left: 0; width: 6px; height: 100%; cursor: ew-resize; z-index: 5;

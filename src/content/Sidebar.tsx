@@ -78,6 +78,7 @@ export function Sidebar() {
   // `collapsed` itself, just whether the panel is shown.
   const [hoverPreview, setHoverPreview] = useState(false)
   const hoverCloseTimer = useRef<number | null>(null)
+  const hoverOpenTimer = useRef<number | null>(null)
 
   // Reactive to Turbo SPA navigation — never read the URL only once, or the
   // sidebar shows stale data (or nothing) after an in-page navigation until a
@@ -220,6 +221,10 @@ export function Sidebar() {
     // while still hovering, it must actually collapse rather than being
     // held open by the stale hover-preview flag until the cursor moves.
     setHoverPreview(false)
+    if (hoverOpenTimer.current) {
+      window.clearTimeout(hoverOpenTimer.current)
+      hoverOpenTimer.current = null
+    }
   }
 
   function setDockSideTo(next: 'left' | 'right') {
@@ -322,9 +327,20 @@ export function Sidebar() {
       window.clearTimeout(hoverCloseTimer.current)
       hoverCloseTimer.current = null
     }
-    setHoverPreview(true)
+    // A brief pause before opening — long enough that just passing the cursor
+    // over the edge on the way to something else doesn't pop the panel open.
+    if (!hoverOpenTimer.current) {
+      hoverOpenTimer.current = window.setTimeout(() => {
+        hoverOpenTimer.current = null
+        setHoverPreview(true)
+      }, 300)
+    }
   }
   function onRootMouseLeave() {
+    if (hoverOpenTimer.current) {
+      window.clearTimeout(hoverOpenTimer.current)
+      hoverOpenTimer.current = null
+    }
     if (!collapsed) return
     // A short delay rather than closing instantly — avoids a flicker if the
     // cursor briefly crosses the gap between the toggle button and the panel.
@@ -332,6 +348,7 @@ export function Sidebar() {
   }
   useEffect(() => () => {
     if (hoverCloseTimer.current) window.clearTimeout(hoverCloseTimer.current)
+    if (hoverOpenTimer.current) window.clearTimeout(hoverOpenTimer.current)
   }, [])
 
   function onResizeDown(e: React.PointerEvent) {
@@ -357,25 +374,37 @@ export function Sidebar() {
         onMouseEnter={onRootMouseEnter}
         onMouseLeave={onRootMouseLeave}
       >
-        <button
-          className="cn-toggle"
-          onPointerDown={onToggleDragDown}
-          title={collapsed ? 'Code Navigator — hover to preview, click to keep open, drag to switch sides (⌘K to search)' : 'Code Navigator — click to collapse, drag to switch sides (⌘K to search)'}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-          </svg>
-        </button>
-        {(!collapsed || hoverPreview) && (
-          <div className="cn-panel" style={pinned ? { width: pinnedWidth } : undefined}>
-            {pinned && (
-              <div
-                className={`cn-resize-handle ${dockSide === 'left' ? 'cn-resize-handle-left' : ''}`}
-                onPointerDown={onResizeDown}
-                title="Drag to resize"
+        <div className="cn-edge-controls">
+          <button
+            className="cn-toggle"
+            onPointerDown={onToggleDragDown}
+            title={collapsed ? 'Code Navigator — hover to preview, click to keep open, drag to move (⌘K to search)' : 'Code Navigator — click to collapse, drag to move (⌘K to search)'}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button
+            className="cn-collapse-tab"
+            onClick={toggle}
+            title={collapsed ? 'Expand Code Navigator' : 'Collapse Code Navigator'}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path
+                d={((!collapsed && dockSide === 'right') || (collapsed && dockSide === 'left')) ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6'}
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
-            )}
+            </svg>
+          </button>
+        </div>
+        <div className={`cn-panel ${!collapsed || hoverPreview ? '' : 'cn-panel-hidden'}`} style={{ width: pinnedWidth }}>
+            <div
+              className={`cn-resize-handle ${dockSide === 'left' ? 'cn-resize-handle-left' : ''}`}
+              onPointerDown={onResizeDown}
+              title="Drag to resize"
+            />
             <div className="cn-header">
               {showBack ? (
                 <button className="cn-back" onClick={() => setView({ kind: 'repo-map' })}>
@@ -518,8 +547,7 @@ export function Sidebar() {
               )}
             </div>
             <RateLimitFooter onOpenOptions={openOptionsPage} />
-          </div>
-        )}
+        </div>
       </div>
       {paletteOpen && graph && (
         <CommandPalette
