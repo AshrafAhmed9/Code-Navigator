@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { getRateLimitState, onRateLimitChange, isRateLimitLow, formatResetIn, type RateLimitState } from '../lib/rateLimit'
 
+// TODO: once published, replace with the real listing URL, e.g.
+// "https://chromewebstore.google.com/detail/<extension-id>"
+const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/code-navigator'
+
 /** Always-visible budget readout so the user never silently runs dry mid-session. */
 export function RateLimitFooter({ onOpenOptions }: { onOpenOptions: () => void }) {
   const [state, setState] = useState<RateLimitState>(() => getRateLimitState())
@@ -30,6 +34,10 @@ export function RateLimitFooter({ onOpenOptions }: { onOpenOptions: () => void }
           )}
         </span>
       )}
+      {' · '}
+      <a href={CHROME_WEB_STORE_URL} target="_blank" rel="noopener noreferrer" className="cn-link">
+        ⭐ rate & leave feedback
+      </a>
     </div>
   )
 }
