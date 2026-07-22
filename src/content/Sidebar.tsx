@@ -65,7 +65,10 @@ export function Sidebar() {
   const [codeFont, setCodeFont] = useState<'sans' | 'mono'>('sans')
   const [theme, setTheme] = useState<Theme>(() => detectGitHubTheme())
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const [pinned, setPinned] = useState(() => localStorage.getItem('cn-pinned') === '1')
+  // Split view (pushing GitHub's own content over) looks and feels better than
+  // floating on top of it, so it's the default for anyone who hasn't
+  // explicitly chosen otherwise — only an existing "0" opts back into overlay.
+  const [pinned, setPinned] = useState(() => localStorage.getItem('cn-pinned') !== '0')
   const [pinnedWidth, setPinnedWidth] = useState(() => Number(localStorage.getItem('cn-pinned-width')) || 480)
   const pinnedWidthRef = useRef(pinnedWidth)
   const resizeState = useRef<{ startX: number; startWidth: number } | null>(null)
