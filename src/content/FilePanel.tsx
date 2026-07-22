@@ -79,6 +79,11 @@ export function FilePanel({ graph, path }: { graph: RepoGraph; path: string }) {
         <div className="cn-label">
           Imports <span className="cn-badge">{file.imports.length}</span>
         </div>
+        {file.imports.length === 0 && (
+          <div className="cn-muted">
+            No in-repo imports detected — this file only imports external packages (or none at all).
+          </div>
+        )}
         {file.imports.slice(0, 8).map((p) => (
           <a key={p} className="cn-file-row cn-link" href={blobUrl(graph, p)} title={p}>
             <span className="cn-file-path">{p}</span>
